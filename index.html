@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>箱ダイヤ描画ソフト - 鉄道車両仕業行路図作成システム</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style id="dynamic-print-style">
+    @page {
+      size: A4 portrait;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- 上部メインツールバー -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-title">箱ダイヤ描画システム</span>
+      </div>
+
+      <div class="header-actions">
+        <!-- プリセット選択 -->
+        <select id="presetSelect" class="form-select" style="width: 280px; font-weight: 500;">
+          <option value="moka14">真岡鐵道 モオカ14形 (全3ページ・全20運用完全版)</option>
+          <option value="de10">真岡鐵道 DE10 1535 (回送・重連・SL後押し)</option>
+          <option value="sl_pc">真岡鐵道 C1266＋50系客車 (SL・客車)</option>
+        </select>
+
+        <!-- 元に戻す / やり直し -->
+        <div class="history-group">
+          <button id="btnUndo" class="btn btn-sm btn-secondary" title="元に戻す (Ctrl+Z)" disabled>
+            ↶ 元に戻す
+          </button>
+          <button id="btnRedo" class="btn btn-sm btn-secondary" title="やり直し (Ctrl+Y)" disabled>
+            ↷ やり直し
+          </button>
+        </div>
+
+        <!-- JSON 保存 / 読込 -->
+        <button id="btnExportJson" class="btn btn-sm btn-secondary" title="現在のダイヤデータをJSONファイルとしてダウンロード保存">
+          保存 (JSON)
+        </button>
+
+        <label class="btn btn-sm btn-secondary" title="JSONファイルを読み込んで反映">
+          読込 (JSON)
+          <input type="file" id="inputFileJson" accept=".json" style="display: none;">
+        </label>
+
+        <!-- 印刷 / PDF出力 -->
+        <button id="btnPrint" class="btn btn-primary btn-sm" title="ブラウザの印刷機能を開いてPDFとして保存">
+          印刷 / PDF出力
+        </button>
+
+        <!-- 使い方・ヘルプ -->
+        <button id="btnHelp" class="btn btn-sm btn-secondary" title="使い方・仕様ガイドを開く (F1)">
+          ？ 使い方
+        </button>
+      </div>
+    </header>
+
+    <!-- メイン2ペイン領域 -->
+    <div class="main-workspace">
+      <!-- 左ペイン: 表形式エディタ -->
+      <aside class="editor-pane" id="editorPane">
+        <!-- table-editor.js により動的レンダリングされます -->
+      </aside>
+
+      <!-- 幅変更スプリッター -->
+      <div class="workspace-splitter" id="workspaceSplitter"></div>
+
+      <!-- 右ペイン: プレビュー表示 -->
+      <main class="preview-pane" id="previewPane">
+        <div class="preview-toolbar">
+          <div class="preview-controls-group">
+            <span class="text-muted" style="font-size: 12px; font-weight: 600;">ページ:</span>
+            <button id="btnPrevPage" class="btn btn-xs btn-secondary" disabled>◀ 前へ</button>
+            <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 50px; text-align: center;">1 / 1</span>
+            <button id="btnNextPage" class="btn btn-xs btn-secondary" disabled>次へ ▶</button>
+            <label class="checkbox-simple" style="margin-left: 8px;">
+              <input type="checkbox" id="checkShowAllPages" checked />
+              <span>全ページ一覧表示</span>
+            </label>
+          </div>
+
+          <div class="preview-controls-group">
+            <span class="text-muted" style="font-size: 12px; font-weight: 600;">ズーム:</span>
+            <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小 (Ctrl + -)">−</button>
+            <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;">
+              <option value="fit-width" selected>横幅フィット (Fit Width)</option>
+              <option value="fit">全体表示 (Fit Page)</option>
+              <option value="0.5">50%</option>
+              <option value="0.75">75%</option>
+              <option value="1.0">100%</option>
+              <option value="1.25">125%</option>
+              <option value="1.5">150%</option>
+            </select>
+            <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大 (Ctrl + +)">＋</button>
+          </div>
+        </div>
+
+        <!-- プレビュー用紙描画エリア -->
+        <div class="preview-scroll-viewport" id="previewViewport">
+          <!-- diagram-renderer.js により動的生成されます -->
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- 使い方・仕様ガイド モーダル -->
+  <div id="helpModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="helpModalTitle" class="modal-title">箱ダイヤ描画システム ご利用ガイド・仕様</h2>
+          <p class="modal-subtitle">鉄道車両仕業行路図（箱ダイヤ）の作成・編集・PDF出力をブラウザだけで完結できるツールです。</p>
+        </div>
+        <button id="btnCloseHelp" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="ヘルプを閉じる">✕</button>
+      </div>
+
+      <div class="modal-nav" id="helpModalNav">
+        <button class="help-nav-btn active" data-help-target="help-sec-quickstart">基本の流れ</button>
+        <button class="help-nav-btn" data-help-target="help-sec-tabs">左パネル各タブ</button>
+        <button class="help-nav-btn" data-help-target="help-sec-snap">注記とAlt吸着</button>
+        <button class="help-nav-btn" data-help-target="help-sec-print">PDF印刷・保存</button>
+        <button class="help-nav-btn" data-help-target="help-sec-spec">仕様・ショートカット</button>
+      </div>
+
+      <div class="modal-body" id="helpModalBody">
+        <section id="help-sec-quickstart" class="help-section">
+          <h3>1. はじめに（基本の使い方）</h3>
+          <div class="help-steps">
+            <div class="help-step">
+              <span class="step-badge">1</span>
+              <div>
+                <strong>サンプルを選ぶ・データを開く</strong>
+                <p>上部のプルダウンからサンプルデータ（モオカ14形 / DE10 / C1266+50系客車）を選ぶか、<code>読込 (JSON)</code> から保存済みデータを読み込みます。</p>
+              </div>
+            </div>
+            <div class="help-step">
+              <span class="step-badge">2</span>
+              <div>
+                <strong>左側パネルの表で編集する</strong>
+                <p>「列車表」「運用一覧」「種別マスタ」「駅マスタ」「注記」「基本設定」タブを切り替えて編集します。変更は即座に右側プレビューへ反映されます。</p>
+              </div>
+            </div>
+            <div class="help-step">
+              <span class="step-badge">3</span>
+              <div>
+                <strong>右側の図面上で確認・微調整する</strong>
+                <p>図面上の列車線をクリックすると左側の該当列車行へジャンプします。注記テキストは図面上で直接ドラッグ移動できます。</p>
+              </div>
+            </div>
+            <div class="help-step">
+              <span class="step-badge">4</span>
+              <div>
+                <strong>保存・PDF出力する</strong>
+                <p>作業途中のデータは <code>保存 (JSON)</code> でファイル保存し、仕上げは <code>印刷 / PDF出力</code> からベクターPDFとして保存・印刷できます。</p>
+              </div>
+            </div>
+          </div>
+          <div class="help-note-box">
+            <strong>データの安全性について：</strong> すべての処理はお使いのブラウザ内だけで実行され、入力データが外部サーバーへ送信・保存されることはありません。作業後は必要に応じて <code>保存 (JSON)</code> で手元に保存してください。
+          </div>
+        </section>
+
+        <section id="help-sec-tabs" class="help-section">
+          <h3>2. 左パネル（編集エリア）各タブの機能</h3>
+          <table class="help-table">
+            <thead>
+              <tr>
+                <th style="width: 120px;">タブ名</th>
+                <th>主な機能とポイント</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>列車表</strong></td>
+                <td>運用を選択し、列車番号・種別・発駅/発時刻・着駅/着時刻・併結・発着記号・行高さステップ(<code>行</code>) を表形式で編集します。<code>＋ 継走列車追加</code> を使うと直前リストの到着駅・到着+10分の時刻を引き継いで追加できます。併結欄では他運用との自動併結、<code>⇄</code> での順序反転、<code>✎</code> での自由記述が可能です。前列車と発着駅がつながらない行や時刻書式（<code>H:MM</code>）誤りは背景色で知らせます。</td>
+              </tr>
+              <tr>
+                <td><strong>運用一覧</strong></td>
+                <td>運用（A1、A2…）の追加・複製・並び替え・削除や、手動改ページモード用の「改ページ」チェックを設定します。<code>編集 ✏️</code> でその運用の列車表へ直接切り替わります。</td>
+              </tr>
+              <tr>
+                <td><strong>種別マスタ</strong></td>
+                <td>普通・回送・SL・快速などの列車種別ごとに、ダイヤ線色・時刻色・列車番号色（カラーピッカー／HEX入力）・線種（実線／破線／点線）を自由に追加・設定できます。<code>🎨 パレット読込</code> から標準・JR東日本風・モノクロ印刷用へ一括切替も可能です。</td>
+              </tr>
+              <tr>
+                <td><strong>駅マスタ</strong></td>
+                <td>路線内の駅一覧を管理します。「表示」チェックを切り替えると図面上に縦基準線を引き、駅間のX座標を自動再配置します。真岡鐵道の主要3駅リセット／全17駅展開ボタンや、自由な駅追加・並び替えに対応しています。</td>
+              </tr>
+              <tr>
+                <td><strong>注記</strong></td>
+                <td>図面上に置く自由テキスト（運休注記など）のページ・文言・色・文字サイズ・X/Y座標を管理します。</td>
+              </tr>
+              <tr>
+                <td><strong>基本設定</strong></td>
+                <td>図面タイトル・著作権表記、用紙サイズ（A4 / B5）と向き（縦 / 横）、自動／手動改ページ、駅名ヘッダーの向き（縦書き／横書き）、省略駅名行の表示規則、自運用番号の強調スタイル、行高・余白の微調整が行えます。</td>
+              </tr>
+              <tr>
+                <td><strong>生JSON</strong></td>
+                <td>上級者向けのJSON直接表示・コピー・編集タブです。直接編集する場合はチェックボックスをONにして <code>適用する</code> を押してください（構造検証付き）。</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h4>発着記号の意味</h4>
+          <ul class="help-list">
+            <li><strong>発記（出発駅側の記号）</strong>：<code>○ 出区</code>（白丸）／<code>● 黒丸</code>／<code>ー なし</code></li>
+            <li><strong>着記（到着駅側の記号）</strong>：<code>△ 入区</code>（白三角）／<code>▲ 終結</code>（黒三角）／<code>ー なし</code></li>
+          </ul>
+        </section>
+
+        <section id="help-sec-snap" class="help-section">
+          <h3>3. 図面上の操作と「Alt吸着」機能</h3>
+          <ul class="help-list">
+            <li><strong>列車線クリック連動</strong>：プレビュー上の列車線をクリックすると、左側の「列車表」で該当運用・該当列車へ自動スクロール＆ハイライトされます。</li>
+            <li><strong>スプリッター幅調整</strong>：画面中央の境界線を左右にドラッグすると、編集パネルとプレビューの比率を変えられます。</li>
+            <li><strong>注記テキストの自由移動</strong>：図面上の赤い文字等の注記は、そのままマウスでドラッグして位置を調整できます（小数点0.16px単位）。</li>
+            <li><strong><code>Alt</code> + ドラッグで列車線に自動吸着</strong>：
+              <ul class="help-sublist">
+                <li><strong>上側／下側スナップ</strong>：ドラッグ中に <code>Alt</code> キーを押すと、近くの列車線の<strong>上側</strong>または<strong>下側</strong>の基準位置へ自動吸着します（青緑の補助ガイド線が表示されます）。</li>
+                <li><strong>左端／中央／右端揃えスナップ</strong>：線の左端や各駅の基準線だけでなく、駅線手前（真岡・茂木など）への<strong>右端揃え</strong>や線区間の中央揃えにも吸着します。</li>
+                <li><strong>ドラッグ中の Alt 解除</strong>：<code>Alt</code> キーを先に離してもその吸着位置を起点に飛び跳ねず滑らかに微調整できます（そのままマウスを離せば吸着位置に確定します）。</li>
+              </ul>
+            </li>
+          </ul>
+        </section>
+
+        <section id="help-sec-print" class="help-section">
+          <h3>4. 印刷 / PDF出力とデータ保存のコツ</h3>
+          <div class="help-columns">
+            <div class="help-card">
+              <h4>きれいなベクターPDFを出す印刷設定</h4>
+              <p>上部の <code>印刷 / PDF出力</code>（または <kbd>Ctrl</kbd>+<kbd>P</kbd>）を押すと印刷ダイアログが開きます。ブラウザ側で以下を設定すると、1:1のベクターPDFとして最も綺麗に仕上がります。</p>
+              <ul class="help-list">
+                <li>送信先：<strong>PDFに保存</strong>（またはお使いのプリンタ）</li>
+                <li>用紙サイズ：基本設定で選んだサイズ（A4 / B5）と一致させる</li>
+                <li>余白：<strong>なし</strong></li>
+                <li>倍率：<strong>既定</strong>（または <strong>100%</strong>）</li>
+                <li>オプション：<strong>背景のグラフィック</strong> にチェック推奨</li>
+              </ul>
+            </div>
+            <div class="help-card">
+              <h4>データの保存と読み込み</h4>
+              <ul class="help-list">
+                <li><code>保存 (JSON)</code> を押すと、現在編集中の全設定・全運用・注記を含む JSON ファイルがダウンロードされます。</li>
+                <li>次回作業時は <code>読込 (JSON)</code> からそのファイルを選択するだけで状態を復元できます。</li>
+                <li>ブラウザを閉じると編集内容は保持されないため、こまめな JSON 保存をおすすめします。</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section id="help-sec-spec" class="help-section">
+          <h3>5. キーボードショートカット & システム仕様</h3>
+          <div class="help-columns">
+            <div class="help-card">
+              <h4>ショートカット一覧</h4>
+              <table class="help-table compact">
+                <tbody>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>Z</kbd></td><td>元に戻す（最大50回）</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>Y</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>やり直し</td></tr>
+                  <tr><td><kbd>Ctrl</kbd> + <kbd>P</kbd></td><td>全ページ展開して印刷 / PDF出力</td></tr>
+                  <tr><td><kbd>Alt</kbd> + 注記ドラッグ</td><td>列車線（上下）・駅境界（左/中央/右端）へ吸着</td></tr>
+                  <tr><td><kbd>F1</kbd> / <kbd>Esc</kbd></td><td>ヘルプ画面を開く / 閉じる</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="help-card">
+              <h4>システム技術仕様（概要）</h4>
+              <ul class="help-list">
+                <li><strong>動作形式</strong>：HTML / CSS / JavaScript + SVG（外部ライブラリ・バックエンド不要）</li>
+                <li><strong>推奨環境</strong>：Google Chrome / Microsoft Edge / Firefox 等の最新モダンブラウザ（PC画面推奨）</li>
+                <li><strong>内部座標系</strong>：SVG viewBox <code>1122.56 × 1587.36</code>（0.16px グリッド基準・ベクター出力）</li>
+                <li><strong>対応用紙</strong>：A4（縦・横）/ B5（縦・横）</li>
+                <li><strong>データ形式</strong>：JSON（スキーマ <code>version: "2.0"</code>）</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">(C) 2026 せきたん — 箱ダイヤ描画ソフト</span>
+        <button id="btnCloseHelpFooter" class="btn btn-primary btn-sm">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- スクリプト読み込み順序 -->
+  <script src="js/sample-data.js"></script>
+  <script src="js/data-model.js"></script>
+  <script src="js/diagram-renderer.js"></script>
+  <script src="js/table-editor.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Reference assets, large recordings (>100MB), and internal dev notes
+references/
+test_final.png
+仕様書.md
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
