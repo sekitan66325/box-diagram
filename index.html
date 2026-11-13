@@ -57,6 +57,11 @@
         <button id="btnHelp" class="btn btn-sm btn-secondary" title="使い方・仕様ガイドを開く (F1)">
           ？ 使い方
         </button>
+
+        <!-- お問い合わせ・ご意見フォーム -->
+        <button id="btnFeedback" class="btn btn-sm btn-secondary" title="不具合報告・ご要望・お問い合わせフォームを開く">
+          ✉ お問い合わせ
+        </button>
       </div>
     </header>
 
@@ -285,7 +290,52 @@
 
       <div class="modal-footer">
         <span class="text-muted" style="font-size: 11px;">(C) 2026 せきたん — 箱ダイヤ描画ソフト</span>
-        <button id="btnCloseHelpFooter" class="btn btn-primary btn-sm">閉じる</button>
+        <div class="modal-footer-actions">
+          <button id="btnOpenFeedbackFromHelp" type="button" class="btn btn-sm btn-secondary" title="アプリ内フォームでお問い合わせを送る">✉ お問い合わせ</button>
+          <a href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary" title="Googleフォームを新しいタブで開く">フォームを別タブで開く ↗</a>
+          <button id="btnCloseHelpFooter" class="btn btn-primary btn-sm">閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- お問い合わせ・ご意見フォーム モーダル -->
+  <div id="feedbackModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog feedback-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="feedbackModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="feedbackModalTitle" class="modal-title">お問い合わせ・ご意見フォーム</h2>
+          <p class="modal-subtitle">不具合報告・機能追加のご要望・使い方のご質問をお送りください（ログイン不要）。</p>
+        </div>
+        <div class="modal-header-actions">
+          <a id="btnFeedbackNewTab" href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-primary" title="Googleフォームを新しいタブで開く">
+            別タブで開く ↗
+          </a>
+          <button id="btnCloseFeedback" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="お問い合わせフォームを閉じる">✕</button>
+        </div>
+      </div>
+
+      <div class="feedback-modal-body">
+        <div id="feedbackLoadingState" class="feedback-loading">
+          Google フォームを読み込んでいます…（表示されない場合は右上の「別タブで開く ↗」をご利用ください）
+        </div>
+        <iframe
+          id="feedbackFormFrame"
+          class="feedback-iframe"
+          data-src="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform?embedded=true"
+          title="箱ダイヤ描画ソフト お問い合わせ・ご意見フォーム"
+          loading="lazy">
+        </iframe>
+      </div>
+
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">表示や入力がしづらい場合は「別タブで開く ↗」をお使いください。</span>
+        <div class="modal-footer-actions">
+          <a id="btnFeedbackNewTabFooter" href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">
+            別タブで開く ↗
+          </a>
+          <button id="btnCloseFeedbackFooter" class="btn btn-primary btn-sm">閉じる</button>
+        </div>
       </div>
     </div>
   </div>

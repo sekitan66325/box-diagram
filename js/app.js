@@ -718,16 +718,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 8. 使い方・ヘルプ モーダル制御
+  // 8. 使い方・ヘルプ / お問い合わせ モーダル制御
   const btnHelp = document.getElementById("btnHelp");
   const helpModalBackdrop = document.getElementById("helpModalBackdrop");
   const btnCloseHelp = document.getElementById("btnCloseHelp");
   const btnCloseHelpFooter = document.getElementById("btnCloseHelpFooter");
+  const btnOpenFeedbackFromHelp = document.getElementById("btnOpenFeedbackFromHelp");
   const helpModalNav = document.getElementById("helpModalNav");
   const helpModalBody = document.getElementById("helpModalBody");
 
+  const btnFeedback = document.getElementById("btnFeedback");
+  const feedbackModalBackdrop = document.getElementById("feedbackModalBackdrop");
+  const btnCloseFeedback = document.getElementById("btnCloseFeedback");
+  const btnCloseFeedbackFooter = document.getElementById("btnCloseFeedbackFooter");
+  const feedbackFormFrame = document.getElementById("feedbackFormFrame");
+  const feedbackLoadingState = document.getElementById("feedbackLoadingState");
+
   function openHelpModal() {
     if (!helpModalBackdrop) return;
+    closeFeedbackModal();
     helpModalBackdrop.hidden = false;
     if (helpModalBody) helpModalBody.scrollTop = 0;
     if (helpModalNav) {
@@ -742,14 +751,46 @@ document.addEventListener("DOMContentLoaded", () => {
     helpModalBackdrop.hidden = true;
   }
 
-  if (btnHelp) btnHelp.addEventListener("click", openHelpModal);
-  if (btnCloseHelp) btnCloseHelp.addEventListener("click", closeHelpModal);
-  if (btnCloseHelpFooter) btnCloseHelpFooter.addEventListener("click", closeHelpModal);
-  if (helpModalBackdrop) {
-    helpModalBackdrop.addEventListener("click", (e) => {
-      if (e.target === helpModalBackdrop) closeHelpModal();
+  function openFeedbackModal() {
+    if (!feedbackModalBackdrop) return;
+    closeHelpModal();
+    feedbackModalBackdrop.hidden = false;
+    if (feedbackFormFrame && feedbackFormFrame.dataset.src && !feedbackFormFrame.getAttribute("src")) {
+      if (feedbackLoadingState) feedbackLoadingState.hidden = false;
+      feedbackFormFrame.setAttribute("src", feedbackFormFrame.dataset.src);
+    }
+  }
+
+  function closeFeedbackModal() {
+    if (!feedbackModalBackdrop) return;
+    feedbackModalBackdrop.hidden = true;
+  }
+
+  if (feedbackFormFrame) {
+    feedbackFormFrame.addEventListener("load", () => {
+      if (feedbackFormFrame.getAttribute("src") && feedbackLoadingState) {
+        feedbackLoadingState.hidden = true;
+      }
     });
   }
+
+  function bindModalCloseTriggers(backdrop, closeBtn, footerCloseBtn, closeFn) {
+    if (closeBtn) closeBtn.addEventListener("click", closeFn);
+    if (footerCloseBtn) footerCloseBtn.addEventListener("click", closeFn);
+    if (backdrop) {
+      backdrop.addEventListener("click", (e) => {
+        if (e.target === backdrop) closeFn();
+      });
+    }
+  }
+
+  if (btnHelp) btnHelp.addEventListener("click", openHelpModal);
+  if (btnFeedback) btnFeedback.addEventListener("click", openFeedbackModal);
+  if (btnOpenFeedbackFromHelp) btnOpenFeedbackFromHelp.addEventListener("click", openFeedbackModal);
+
+  bindModalCloseTriggers(helpModalBackdrop, btnCloseHelp, btnCloseHelpFooter, closeHelpModal);
+  bindModalCloseTriggers(feedbackModalBackdrop, btnCloseFeedback, btnCloseFeedbackFooter, closeFeedbackModal);
+
   if (helpModalNav && helpModalBody) {
     helpModalNav.querySelectorAll(".help-nav-btn").forEach(btn => {
       btn.addEventListener("click", () => {
@@ -770,9 +811,14 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         closeHelpModal();
       }
-    } else if (e.key === "Escape" && helpModalBackdrop && !helpModalBackdrop.hidden) {
-      e.preventDefault();
-      closeHelpModal();
+    } else if (e.key === "Escape") {
+      if (feedbackModalBackdrop && !feedbackModalBackdrop.hidden) {
+        e.preventDefault();
+        closeFeedbackModal();
+      } else if (helpModalBackdrop && !helpModalBackdrop.hidden) {
+        e.preventDefault();
+        closeHelpModal();
+      }
     }
   });
 
