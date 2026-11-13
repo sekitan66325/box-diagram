@@ -163,9 +163,9 @@
 <script>
   window.seekTo = function(t) {
     document.getElementById("rays").style.transform = `rotate(${t * 14}deg)`;
-    document.getElementById("introRow").classList.toggle("show", t >= 0.15);
+    document.getElementById("introRow").classList.toggle("show", t >= 0.08);
     document.getElementById("logoPlate").classList.toggle("show", t >= 1.25);
-    document.getElementById("badgesRow").classList.toggle("show", t >= 2.2);
+    document.getElementById("badgesRow").classList.toggle("show", t >= 1.90);
   };
   if (new URLSearchParams(location.search).get("manual") !== "1") {
     const s = performance.now();

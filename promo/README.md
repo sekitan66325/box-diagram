@@ -17,8 +17,9 @@
 - `promo/slides/scene4_free_price.html` — シーン4（0:32〜0:42）：集中線＋特大「無 料 ！（0円）」価格発表＆「安〜い！」オチ
 - `promo/slides/scene5_release_cta.html` — シーン5（0:42〜0:45）：公開日時（2026年11月14日 18:00）＆ `@sekitan66325` 告知スライド
 - `promo/slides/telop_overlay.html` — シーン2後半・シーン3（カットA/B/C）の実操作映像に重ねる透過オーバーレイテロップ
-- `promo/audio_synth.py` — レトロ通販風オリジナルBGM（48kHz ステレオ）＋効果音（ジャジャン／ピコーン／ドドーン 等）合成スクリプト
-- `promo/build_promo_video.py` — 実ブラウザキャプチャ＋HTMLスライド＋音声を FFmpeg で合成し 1080p MP4 を生成するビルドスクリプト
+- `promo/voice_synth.py` — 社長（おじさん役）・女性アシスタント役の掛け合い日本語合成音声ジェネレーター（タイムライン同期・TV放送風EQ・ダッキング用エンベロープ生成）
+- `promo/audio_synth.py` — レトロ通販風オリジナルBGM（48kHz ステレオ）＋効果音＋合成音声ミキシング（自動ダッキング対応）スクリプト
+- `promo/build_promo_video.py` — 実ブラウザキャプチャ＋HTMLスライド＋音声付トラックを FFmpeg で合成し 1080p MP4 を生成するビルドスクリプト
 
 ## 文言を変更して動画を再生成する方法
 

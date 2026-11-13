@@ -447,20 +447,20 @@
     xlDialog.classList.remove("visible");
     xlError.classList.remove("visible");
 
-    // セル選択＆手作業ステップ (0s -> 10s)
-    if (t >= 0.6) {
+    // セル選択＆手作業ステップ (0s -> 9.8s)
+    if (t >= 0.5) {
       for (let c = 2; c <= 8; c++) document.getElementById(`cell-4-${c}`).classList.add("selected-range");
     }
-    if (t >= 1.5 && t < 2.3) btnBorder.classList.add("pressed");
-    if (t >= 2.0) {
+    if (t >= 1.3 && t < 2.1) btnBorder.classList.add("pressed");
+    if (t >= 1.8) {
       for (let c = 2; c <= 8; c++) document.getElementById(`cell-4-${c}`).classList.add("has-hand-border-b");
     }
-    if (t >= 2.8) {
+    if (t >= 2.5) {
       for (let c = 3; c <= 9; c++) document.getElementById(`cell-6-${c}`).classList.add("selected-range");
     }
-    if (t >= 3.5 && t < 4.5) btnMerge.classList.add("pressed");
-    if (t >= 4.7 && t < 7.0) xlDialog.classList.add("visible");
-    if (t >= 6.8) {
+    if (t >= 3.2 && t < 4.2) btnMerge.classList.add("pressed");
+    if (t >= 4.3 && t < 5.95) xlDialog.classList.add("visible");
+    if (t >= 5.70) {
       document.getElementById("cell-9-3").classList.add("misaligned-mess");
       document.getElementById("cell-9-4").classList.add("misaligned-mess");
       xlError.classList.add("visible");
@@ -468,21 +468,22 @@
 
     // カーソル連続軌道
     const cursor = document.getElementById("fakeCursor");
-    if (t < 1.2) { cursor.style.left = "420px"; cursor.style.top = "310px"; }
-    else if (t < 2.5) { cursor.style.left = "96px"; cursor.style.top = "92px"; }
-    else if (t < 3.4) { cursor.style.left = "740px"; cursor.style.top = "374px"; }
-    else if (t < 4.8) { cursor.style.left = "265px"; cursor.style.top = "92px"; }
-    else if (t < 7.2) { cursor.style.left = "815px"; cursor.style.top = "395px"; }
+    if (t < 1.1) { cursor.style.left = "420px"; cursor.style.top = "310px"; }
+    else if (t < 2.3) { cursor.style.left = "96px"; cursor.style.top = "92px"; }
+    else if (t < 3.1) { cursor.style.left = "740px"; cursor.style.top = "374px"; }
+    else if (t < 4.4) { cursor.style.left = "265px"; cursor.style.top = "92px"; }
+    else if (t < 6.1) { cursor.style.left = "815px"; cursor.style.top = "395px"; }
     else { cursor.style.left = "760px"; cursor.style.top = "510px"; }
 
-    // テロップ「間（ま）」のタイムライン
-    // 0.3s〜3.2s: 「ダイヤ好きのマニアの皆さん！」
-    // 3.3s〜6.5s: 「Excelでポチポチ線引いて、セル結合とかしちゃって…」
-    // 6.6s〜8.1s: 社長「気が利かないねぇ〜…」（間）
-    // 8.2s〜10.0s: 女性アシスタント「面倒じゃありませんか！」
-    if (t >= 0.3) {
+    // 合成音声＋テロップ「間（ま）」の同期タイムライン
+    // 0.25s〜1.80s: 「ダイヤ好きのマニアの皆さん！」
+    // 2.25s〜5.64s: 「Excelでポチポチ線引いて、セル結合とかしちゃって…」
+    // 5.70s: エラー警告ポップ & ブザー
+    // 6.35s〜7.36s: 社長「気が利かないねぇ〜…」
+    // 7.90s〜9.34s: 女性アシスタント「面倒じゃありませんか！」
+    if (t >= 0.20) {
       topTelop.classList.add("show");
-      if (t >= 6.6) {
+      if (t >= 6.30) {
         topSpeaker.textContent = "🎙 社長（ぼやき）";
         topText.textContent = "気が利かないねぇ〜…";
       } else {
@@ -493,12 +494,12 @@
       topTelop.classList.remove("show");
     }
 
-    if (t >= 3.3 && t < 6.5) {
+    if (t >= 2.15 && t < 5.75) {
       botTelop.classList.add("show");
       botSpeaker.style.display = "none";
       botText.className = "telop-white-red";
       botText.textContent = "Excelでポチポチ線引いて、セル結合とかしちゃって…";
-    } else if (t >= 8.2) {
+    } else if (t >= 7.85) {
       botTelop.classList.add("show");
       botSpeaker.style.display = "inline-flex";
       botSpeaker.textContent = "💐 女性アシスタント";

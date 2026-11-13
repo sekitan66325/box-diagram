@@ -156,8 +156,12 @@
     document.getElementById("card").style.transform = `scale(${0.92 + 0.08 * s})`;
     document.getElementById("card").style.opacity = String(s);
     const s2 = Math.min(1, Math.max(0, (t - 0.35) / 0.25));
-    document.getElementById("accountBar").style.transform = `translateY(${(1 - s2) * 24}px)`;
-    document.getElementById("accountBar").style.opacity = String(s2);
+    const bar = document.getElementById("accountBar");
+    bar.style.transform = `translateY(${(1 - s2) * 24}px) scale(${t >= 4.95 ? 1.03 : 1})`;
+    bar.style.opacity = String(s2);
+    bar.style.boxShadow = t >= 4.95
+      ? "0 0 0 6px #ffe600, 0 18px 38px rgba(56,189,248,0.55)"
+      : "0 0 0 5px #000000, 0 14px 32px rgba(0,0,0,0.65)";
   };
   if (new URLSearchParams(location.search).get("manual") !== "1") {
     window.seekTo(2.0);

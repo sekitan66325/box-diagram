@@ -1,5 +1,5 @@
 """
-箱ダイヤ描画システム β版 告知CM動画（夢グループ風 / 1920x1080 / 30fps / 45秒）ビルダー
+箱ダイヤ描画システム β版 告知CM動画（夢グループ風 / 1920x1080 / 30fps / 47.6秒 / 合成音声付）ビルダー
 
 厳守事項:
 - 生成AIによる動画/画像生成（Text-to-Video等）は一切使用しません。
@@ -173,14 +173,14 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     }""")
 
     # ------------------------------------------------------------------
-    # Scene 2-B (14.0s - 18.0s = 4.0s): アプリ全体像＋桜川電鉄本線サンプル俯瞰
+    # Scene 2-B (12.70s - 16.00s = 3.30s): アプリ全体像＋桜川電鉄本線サンプル俯瞰
     # ------------------------------------------------------------------
     await page.select_option("#presetSelect", "sakuragawa_main")
     await page.select_option("#selectZoom", "fit-width")
     await page.uncheck("#checkShowAllPages")
     await page.wait_for_timeout(200)
 
-    n_2b = int(4.0 * FPS)
+    n_2b = int(round(3.30 * FPS))
     enc_2b = SegmentEncoder(ffmpeg_exe, out_paths["2b"], overlays["scene2b"])
     for i in range(n_2b):
         # ゆっくりプレビューを上→中央へスクロール（ヘッダーが上バッジに隠れない範囲）
@@ -192,7 +192,7 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     print(f"Captured real app Scene 2-B ({n_2b} frames)")
 
     # ------------------------------------------------------------------
-    # Scene 3 Cut A (18.0s - 22.5s = 4.5s): 駅・列車データ入力 → 即座に線と枠が自動描画！
+    # Scene 3 Cut A (16.00s - 19.80s = 3.80s): 駅・列車データ入力 → 即座に線と枠が自動描画！
     # ------------------------------------------------------------------
     await page.select_option("#presetSelect", "sakuragawa_main")
     await page.select_option("#selectZoom", "fit-width")
@@ -208,7 +208,7 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     bx = int(add_btn_box["x"] + add_btn_box["width"] / 2)
     by = int(add_btn_box["y"] + add_btn_box["height"] / 2)
 
-    n_3a = int(4.5 * FPS)
+    n_3a = int(round(3.80 * FPS))
     enc_3a = SegmentEncoder(ffmpeg_exe, out_paths["3a"], overlays["cutA"])
 
     did_add = False
@@ -219,37 +219,37 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
 
     for i in range(n_3a):
         t = i / FPS
-        cursor = (bx - int(max(0, 0.7 - t) * 140), by + int(max(0, 0.7 - t) * 90), False)
+        cursor = (bx - int(max(0, 0.50 - t) * 140), by + int(max(0, 0.50 - t) * 90), False)
         hl = None
 
-        if t >= 0.75 and not did_add:
+        if t >= 0.55 and not did_add:
             await page.click("#btnAddTrain")
             await page.wait_for_timeout(80)
             did_add = True
             await page.evaluate("() => { const pv = document.querySelector('#previewViewport'); pv.scrollTop = 55; }")
 
-        if 0.75 <= t < 1.05:
-            cursor = (bx, by, t < 0.92)
+        if 0.55 <= t < 0.85:
+            cursor = (bx, by, t < 0.72)
 
         row8_sel = "#trainsGridTable tbody tr:nth-child(8)"
-        if did_add and t >= 1.15 and not did_type_no:
+        if did_add and t >= 0.90 and not did_type_no:
             inp_no = page.locator(f"{row8_sel} input[data-field='trainNo']")
             await inp_no.fill("777")
             await inp_no.dispatch_event("change")
             did_type_no = True
 
-        if did_add and t >= 1.85 and not did_type_type:
+        if did_add and t >= 1.50 and not did_type_type:
             sel_type = page.locator(f"{row8_sel} select[data-field='typeId']")
             await sel_type.select_option("express")
             did_type_type = True
 
-        if did_add and t >= 2.55 and not did_type_dep:
+        if did_add and t >= 2.10 and not did_type_dep:
             inp_dep = page.locator(f"{row8_sel} input[data-field='depTime']")
             await inp_dep.fill("10:42")
             await inp_dep.dispatch_event("change")
             did_type_dep = True
 
-        if did_add and t >= 3.20 and not did_type_arr:
+        if did_add and t >= 2.70 and not did_type_arr:
             sel_to = page.locator(f"{row8_sel} select[data-field='toStation']")
             await sel_to.select_option("aoyamaonsen")
             inp_arr = page.locator(f"{row8_sel} input[data-field='arrTime']")
@@ -257,19 +257,19 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
             await inp_arr.dispatch_event("change")
             did_type_arr = True
 
-        if did_add and 1.15 <= t < 1.85:
+        if did_add and 0.90 <= t < 1.50:
             box = await page.locator(f"{row8_sel} input[data-field='trainNo']").bounding_box()
-            cursor = (int(box["x"] + box["width"] - 4), int(box["y"] + box["height"] / 2), t < 1.32)
+            cursor = (int(box["x"] + box["width"] - 4), int(box["y"] + box["height"] / 2), t < 1.08)
             hl = (int(box["x"] - 4), int(box["y"] - 4), int(box["x"] + box["width"] + 4), int(box["y"] + box["height"] + 4))
-        elif did_add and 1.85 <= t < 2.55:
+        elif did_add and 1.50 <= t < 2.10:
             box = await page.locator(f"{row8_sel} select[data-field='typeId']").bounding_box()
-            cursor = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), t < 2.02)
+            cursor = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), t < 1.68)
             hl = (int(box["x"] - 4), int(box["y"] - 4), int(box["x"] + box["width"] + 4), int(box["y"] + box["height"] + 4))
-        elif did_add and 2.55 <= t < 3.20:
+        elif did_add and 2.10 <= t < 2.70:
             box = await page.locator(f"{row8_sel} input[data-field='depTime']").bounding_box()
-            cursor = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), t < 2.72)
+            cursor = (int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2), t < 2.28)
             hl = (int(box["x"] - 4), int(box["y"] - 4), int(box["x"] + box["width"] + 4), int(box["y"] + box["height"] + 4))
-        elif did_add and t >= 3.20:
+        elif did_add and t >= 2.70:
             # 右側A1の下端に新しく描かれた赤い急行「777」ライン上を指す
             cursor = (1390, 395, False)
 
@@ -279,7 +279,7 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     print(f"Captured real app Scene 3 Cut A ({n_3a} frames)")
 
     # ------------------------------------------------------------------
-    # Scene 3 Cut B (22.5s - 27.5s = 5.0s): 折返し・増解結・入出庫が整列している画面のズーム
+    # Scene 3 Cut B (19.80s - 24.40s = 4.60s): 折返し・増解結・入出庫が整列している画面のズーム
     # ------------------------------------------------------------------
     await page.select_option("#presetSelect", "sakuragawa_main")
     await page.uncheck("#checkShowAllPages")
@@ -290,14 +290,14 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     }""")
     await page.wait_for_timeout(150)
 
-    n_3b = int(5.0 * FPS)
+    n_3b = int(round(4.60 * FPS))
     enc_3b = SegmentEncoder(ffmpeg_exe, out_paths["3b"], overlays["cutB"])
     switched_p2 = False
     for i in range(n_3b):
         t = i / FPS
-        if t < 2.5:
+        if t < 2.3:
             # 1ページ目 (A1 3両併結・A2・A3 途中駅部分継走) を拡大パン
-            p = t / 2.5
+            p = t / 2.3
             sy = int(20 + p * 230)
             await page.evaluate(f"() => {{ const pv = document.querySelector('#previewViewport'); pv.scrollTop = {sy}; pv.scrollLeft = 40; }}")
         else:
@@ -306,7 +306,7 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
                 await page.wait_for_timeout(100)
                 switched_p2 = True
             # 2ページ目 (変A3・A4・A5 併結・観光B1・C1 試運転破線) を拡大パン
-            p = (t - 2.5) / 2.5
+            p = (t - 2.3) / 2.3
             sy = int(15 + p * 240)
             await page.evaluate(f"() => {{ const pv = document.querySelector('#previewViewport'); pv.scrollTop = {sy}; pv.scrollLeft = 40; }}")
         await page.evaluate("() => new Promise(r => requestAnimationFrame(r))")
@@ -315,7 +315,7 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     print(f"Captured real app Scene 3 Cut B ({n_3b} frames)")
 
     # ------------------------------------------------------------------
-    # Scene 3 Cut C (27.5s - 32.0s = 4.5s): A4サイズでそのまま綺麗に印刷プレビュー
+    # Scene 3 Cut C (24.40s - 27.90s = 3.50s): A4サイズでそのまま綺麗に印刷プレビュー
     # ------------------------------------------------------------------
     await page.select_option("#presetSelect", "sakuragawa_main")
     await page.uncheck("#checkShowAllPages")
@@ -330,14 +330,14 @@ async def capture_app_demos(page, ffmpeg_exe: str, overlays: dict, out_paths: di
     pbx = int(print_btn_box["x"] + print_btn_box["width"] / 2)
     pby = int(print_btn_box["y"] + print_btn_box["height"] / 2)
 
-    n_3c = int(4.5 * FPS)
+    n_3c = int(round(3.50 * FPS))
     enc_3c = SegmentEncoder(ffmpeg_exe, out_paths["3c"], overlays["cutC"])
     did_print_view = False
     for i in range(n_3c):
         t = i / FPS
-        if t < 1.25:
-            cursor = (pbx, pby, t >= 0.80)
-            hl = (int(print_btn_box["x"] - 3), int(print_btn_box["y"] - 3), int(print_btn_box["x"] + print_btn_box["width"] + 3), int(print_btn_box["y"] + print_btn_box["height"] + 3)) if t >= 0.45 else None
+        if t < 0.95:
+            cursor = (pbx, pby, t >= 0.65)
+            hl = (int(print_btn_box["x"] - 3), int(print_btn_box["y"] - 3), int(print_btn_box["x"] + print_btn_box["width"] + 3), int(print_btn_box["y"] + print_btn_box["height"] + 3)) if t >= 0.30 else None
             await page.evaluate("() => new Promise(r => requestAnimationFrame(r))")
             enc_3c.push_png_bytes(await page.screenshot(type="png"), cursor_xy=cursor, highlight_box=hl)
         else:
@@ -383,8 +383,8 @@ async def main():
     ffmpeg_exe = get_ffmpeg_exe()
     print(f"Using FFmpeg: {ffmpeg_exe}")
 
-    # 1. 音声WAV生成 (45.0s)
-    wav_path = os.path.join(BUILD_DIR, "soundtrack_45s.wav")
+    # 1. 音声WAV生成 (47.60s = 合成音声＋BGM＋SE)
+    wav_path = os.path.join(BUILD_DIR, "soundtrack_mix.wav")
     audio_synth.build_audio(wav_path)
 
     # 2. ローカルWebサーバー起動 & Playwright起動
@@ -411,20 +411,20 @@ async def main():
             overlays[mode_key] = await capture_overlay_png(page, mode_key)
         print("Rendered transparent overlay PNGs.")
 
-        # シーン1 (0-10s = 10.0s)
-        await capture_slide_segment(page, ffmpeg_exe, "scene1_excel_pain.html", 10.0, seg_paths["s1"])
+        # シーン1 (0.00 - 9.80s = 9.80s)
+        await capture_slide_segment(page, ffmpeg_exe, "scene1_excel_pain.html", 9.80, seg_paths["s1"])
 
-        # シーン2A (10-14s = 4.0s)
-        await capture_slide_segment(page, ffmpeg_exe, "scene2_title_reveal.html", 4.0, seg_paths["s2a"])
+        # シーン2A (9.80 - 12.70s = 2.90s)
+        await capture_slide_segment(page, ffmpeg_exe, "scene2_title_reveal.html", 2.90, seg_paths["s2a"])
 
-        # シーン2B + シーン3 (14-32s = 18.0s) 実アプリブラウザ操作録画
+        # シーン2B + シーン3 (12.70 - 27.90s = 15.20s) 実アプリブラウザ操作録画
         await capture_app_demos(page, ffmpeg_exe, overlays, seg_paths)
 
-        # シーン4 (32-42s = 10.0s)
-        await capture_slide_segment(page, ffmpeg_exe, "scene4_free_price.html", 10.0, seg_paths["s4"])
+        # シーン4 (27.90 - 40.00s = 12.10s)
+        await capture_slide_segment(page, ffmpeg_exe, "scene4_free_price.html", 12.10, seg_paths["s4"])
 
-        # シーン5 (42-45s = 3.0s)
-        await capture_slide_segment(page, ffmpeg_exe, "scene5_release_cta.html", 3.0, seg_paths["s5"])
+        # シーン5 (40.00 - 47.60s = 7.60s)
+        await capture_slide_segment(page, ffmpeg_exe, "scene5_release_cta.html", 7.60, seg_paths["s5"])
 
         await browser.close()
 

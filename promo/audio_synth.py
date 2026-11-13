@@ -1,14 +1,15 @@
 """
-夢グループ風 通販CM（45.0秒）レトロBGM＋効果音(SE) シンセサイザー (48kHz Stereo WAV)
-外部音声素材や生成AIに頼らず、numpyで軽快な昭和〜平成風ショッピングBGMと効果音を合成します。
+夢グループ風 通販CM（47.6秒）レトロBGM＋効果音(SE)＋合成音声ミキサー (48kHz Stereo WAV)
 """
 import os
 import wave
 import numpy as np
 
+from voice_synth import build_voice_track
+
 SR = 48000
-DURATION = 45.0
-N_SAMPLES = int(SR * DURATION)
+DURATION = 47.60
+N_SAMPLES = int(round(SR * DURATION))
 
 
 def midi_to_hz(note: float) -> float:
@@ -124,36 +125,41 @@ def synth_buzzer() -> np.ndarray:
     return sig * 0.16
 
 
-def build_audio(out_wav_path: str):
+def build_audio(out_wav_path: str, tts_cache_dir: str = None):
     os.makedirs(os.path.dirname(out_wav_path), exist_ok=True)
-    buf_l = np.zeros(N_SAMPLES, dtype=np.float64)
-    buf_r = np.zeros(N_SAMPLES, dtype=np.float64)
+    if tts_cache_dir is None:
+        tts_cache_dir = os.path.join(os.path.dirname(out_wav_path), "tts_final")
+
+    # BGM 用と 効果音(SE) 用を分け、発話時のスマートダッキングを綺麗にかける
+    bgm_l = np.zeros(N_SAMPLES, dtype=np.float64)
+    bgm_r = np.zeros(N_SAMPLES, dtype=np.float64)
+    sfx_l = np.zeros(N_SAMPLES, dtype=np.float64)
+    sfx_r = np.zeros(N_SAMPLES, dtype=np.float64)
 
     # ------------------------------------------------------------------
-    # SCENE 1 (0.0 - 9.4s): トホホお悩み・ゆっくりマイナー風オルガン＋クリック＋エラー音
+    # SCENE 1 (0.0 - 9.80s): トホホお悩み・ゆっくりマイナー風オルガン＋クリック＋エラー音
     # ------------------------------------------------------------------
     sad_chords = [
-        (0.2, [57, 60, 64], 2.1),  # Am
-        (2.4, [53, 57, 60], 2.1),  # F
-        (4.6, [50, 53, 57], 2.0),  # Dm
-        (6.7, [52, 56, 59], 2.5),  # E7 (気が利かないねぇ〜)
+        (0.2, [57, 60, 64], 2.0),  # Am
+        (2.3, [53, 57, 60], 2.0),  # F
+        (4.4, [50, 53, 57], 1.9),  # Dm
+        (6.4, [52, 56, 59], 2.8),  # E7 (気が利かないねぇ〜)
     ]
     for t0, notes, dur in sad_chords:
         for i, m in enumerate(notes):
-            add_mono_event(buf_l, buf_r, t0, synth_organ_note(midi_to_hz(m), dur, 0.11), pan=(i - 1) * 0.25)
+            add_mono_event(bgm_l, bgm_r, t0, synth_organ_note(midi_to_hz(m), dur, 0.10), pan=(i - 1) * 0.25)
 
-    for click_t in [1.1, 1.5, 2.9, 3.5, 4.7]:
-        add_mono_event(buf_l, buf_r, click_t, synth_mouse_click(), pan=0.1)
+    for click_t in [0.9, 1.4, 2.6, 3.2, 4.3]:
+        add_mono_event(sfx_l, sfx_r, click_t, synth_mouse_click(), pan=0.1)
 
-    # 「エラー・セル結合不可」ブザー
-    add_mono_event(buf_l, buf_r, 6.8, synth_buzzer(), pan=0.0, gain=0.95)
+    # 5.70s: 「エラー・セル結合不可」ブザー（直後の「気が利かないねぇ…」の前に鳴らす）
+    add_mono_event(sfx_l, sfx_r, 5.70, synth_buzzer(), pan=0.0, gain=0.90)
 
     # ------------------------------------------------------------------
-    # SCENE 2〜5 BGM (10.0 - 44.5s): 126 BPM 通販風ご機嫌シンセ・マーチ！
-    # （ただし 35.1〜36.85s ドラムロール前は一旦抜いて「間」を作る）
+    # SCENE 2〜5 BGM (9.80 - 46.80s): 126 BPM 通販風ご機嫌シンセ・マーチ！
+    # （ただし 31.65〜33.45s ドラムロール前は一旦抜いて「間」を作る）
     # ------------------------------------------------------------------
-    beat_sec = 60.0 / 126.0  # ~0.47619s
-    # コード進行: C -> G -> Am -> Em -> F -> C -> F -> G (典型的な楽しいショッピング感)
+    beat_sec = 60.0 / 126.0
     prog = [
         (48, [60, 64, 67]),  # C
         (55, [59, 62, 67]),  # G
@@ -164,7 +170,6 @@ def build_audio(out_wav_path: str):
         (53, [60, 65, 69]),  # F
         (55, [59, 62, 67]),  # G
     ]
-    # チャッピーなメロディ（MIDI番号, 拍オフセット）
     melody_pattern = [
         (72, 0.0, 0.45), (76, 0.5, 0.45), (79, 1.0, 0.45), (76, 1.5, 0.35),
         (74, 2.0, 0.45), (79, 2.5, 0.45), (76, 3.0, 0.7),
@@ -172,98 +177,109 @@ def build_audio(out_wav_path: str):
         (74, 6.0, 0.45), (71, 6.5, 0.45), (72, 7.0, 0.7),
     ]
 
-    bgm_start = 10.2
-    total_beats = int((44.2 - bgm_start) / beat_sec)
+    bgm_start = 10.00
+    total_beats = int((45.90 - bgm_start) / beat_sec)
     for b in range(total_beats):
         t = bgm_start + b * beat_sec
-        # 価格直前（35.1〜36.85s）のドラマチック「間＆ドラムロール」帯ではBGMを止める
-        if 35.1 <= t <= 36.85:
+        if 31.60 <= t <= 33.45:
             continue
 
         bar_idx = (b // 2) % len(prog)
         bass_midi, chord_midis = prog[bar_idx]
 
-        # ベース＆キック (偶数ビート) / オフビート伴奏 (奇数ビート)
         if b % 2 == 0:
-            add_mono_event(buf_l, buf_r, t, synth_kick(0.16, 0.38), pan=0.0)
-            add_mono_event(buf_l, buf_r, t, synth_bass(midi_to_hz(bass_midi), beat_sec * 0.9, 0.25), pan=-0.05)
+            add_mono_event(bgm_l, bgm_r, t, synth_kick(0.16, 0.36), pan=0.0)
+            add_mono_event(bgm_l, bgm_r, t, synth_bass(midi_to_hz(bass_midi), beat_sec * 0.9, 0.24), pan=-0.05)
         else:
-            add_mono_event(buf_l, buf_r, t, synth_snare_hit(0.11, 0.16), pan=0.08)
+            add_mono_event(bgm_l, bgm_r, t, synth_snare_hit(0.11, 0.15), pan=0.08)
             for idx_c, cm in enumerate(chord_midis):
-                add_mono_event(buf_l, buf_r, t, synth_organ_note(midi_to_hz(cm), beat_sec * 0.55, 0.08), pan=(idx_c - 1) * 0.35)
+                add_mono_event(bgm_l, bgm_r, t, synth_organ_note(midi_to_hz(cm), beat_sec * 0.55, 0.075), pan=(idx_c - 1) * 0.35)
 
-        add_mono_event(buf_l, buf_r, t, synth_hihat(0.065), pan=-0.2)
-        add_mono_event(buf_l, buf_r, t + beat_sec * 0.5, synth_hihat(0.045), pan=0.2)
+        add_mono_event(bgm_l, bgm_r, t, synth_hihat(0.06), pan=-0.2)
+        add_mono_event(bgm_l, bgm_r, t + beat_sec * 0.5, synth_hihat(0.04), pan=0.2)
 
-    # メロディループ（8ビート単位で回し、42sでエンディング終止）
     cycle_len_beats = 8
-    mel_t = 11.2
-    while mel_t < 42.0:
+    mel_t = 11.05
+    while mel_t < 45.2:
         for note_m, offset_b, dur_b in melody_pattern:
             nt = mel_t + offset_b * beat_sec
-            if nt >= 35.0 and nt <= 37.2:
+            if 31.50 <= nt <= 33.70:
                 continue
-            if nt >= 41.8:
+            if nt >= 45.2:
                 continue
-            add_mono_event(buf_l, buf_r, nt, synth_organ_note(midi_to_hz(note_m), dur_b * beat_sec, 0.10), pan=0.18)
+            add_mono_event(bgm_l, bgm_r, nt, synth_organ_note(midi_to_hz(note_m), dur_b * beat_sec, 0.085), pan=0.18)
         mel_t += cycle_len_beats * beat_sec
 
     # ------------------------------------------------------------------
     # 各シーン切り替え効果音（ジャジャン！ / ピコーン！ / ドドーン！）
     # ------------------------------------------------------------------
-    # 10.0s: シーン2突入 ジャジャン！
+    # 9.80s: シーン2突入 ジャジャン！ & 11.05s ロゴ出現
     for m in [60, 64, 67, 72]:
-        add_mono_event(buf_l, buf_r, 10.0, synth_brass(midi_to_hz(m), 0.35, 0.24))
-    add_mono_event(buf_l, buf_r, 11.2, synth_brass(midi_to_hz(72), 0.55, 0.26))
-    add_mono_event(buf_l, buf_r, 11.2, synth_bell(midi_to_hz(84), 0.6, 0.26), pan=-0.25)
+        add_mono_event(sfx_l, sfx_r, 9.80, synth_brass(midi_to_hz(m), 0.32, 0.20))
+    add_mono_event(sfx_l, sfx_r, 11.05, synth_brass(midi_to_hz(72), 0.45, 0.22))
+    add_mono_event(sfx_l, sfx_r, 11.05, synth_bell(midi_to_hz(84), 0.55, 0.22), pan=-0.25)
 
-    # 14.0s / 18.0s / 22.5s / 27.5s: 実演カット切替 ピコーン！
-    for p_t, n1, n2 in [(14.0, 76, 84), (18.0, 79, 88), (22.5, 81, 91), (27.5, 84, 96)]:
-        add_mono_event(buf_l, buf_r, p_t, synth_bell(midi_to_hz(n1), 0.35, 0.25), pan=-0.2)
-        add_mono_event(buf_l, buf_r, p_t + 0.08, synth_bell(midi_to_hz(n2), 0.55, 0.28), pan=0.2)
+    # 12.70s / 16.00s / 19.80s / 24.40s: 実アプリ・実演カット切替 ピコーン！
+    for p_t, n1, n2 in [(12.70, 76, 84), (16.00, 79, 88), (19.80, 81, 91), (24.40, 84, 96)]:
+        add_mono_event(sfx_l, sfx_r, p_t, synth_bell(midi_to_hz(n1), 0.30, 0.22), pan=-0.2)
+        add_mono_event(sfx_l, sfx_r, p_t + 0.07, synth_bell(midi_to_hz(n2), 0.45, 0.24), pan=0.2)
 
-    # 34.0s: 価格発表煽りイントロ
-    add_mono_event(buf_l, buf_r, 34.0, synth_brass(midi_to_hz(67), 0.45, 0.24))
+    # 27.90s: シーン4 価格発表イントロ
+    add_mono_event(sfx_l, sfx_r, 27.90, synth_brass(midi_to_hz(67), 0.40, 0.20))
 
-    # 35.15 - 36.65s: スネア ドラムロール（クレッシェンド -> 0.2s無音の「間」）
+    # 31.80 - 33.15s: スネア ドラムロール（クレッシェンド -> 0.30s無音の劇的な「間」）
     rng = np.random.default_rng(2026)
-    roll_t = 35.15
+    roll_t = 31.80
     step = 0.068
-    while roll_t < 36.62:
-        progress = (roll_t - 35.15) / 1.5
-        amp = 0.08 + 0.26 * (progress ** 1.4)
-        add_mono_event(buf_l, buf_r, roll_t, synth_snare_hit(0.08, amp), pan=rng.uniform(-0.15, 0.15))
+    while roll_t < 33.15:
+        progress = (roll_t - 31.80) / 1.35
+        amp = 0.08 + 0.24 * (progress ** 1.4)
+        add_mono_event(sfx_l, sfx_r, roll_t, synth_snare_hit(0.08, amp), pan=rng.uniform(-0.15, 0.15))
         roll_t += step
         step = max(0.036, step * 0.965)
 
-    # 36.85s: 特大「無料！（0円）」ドドーーーン＋ジャジャーン＋キラキラ！
-    add_mono_event(buf_l, buf_r, 36.85, synth_kick(0.32, 0.72), pan=0.0)
-    add_mono_event(buf_l, buf_r, 36.85, synth_snare_hit(0.24, 0.36), pan=0.0)
+    # 33.45s: 特大「無料！（0円）」ドドーーーン＋ジャジャーン＋キラキラ！
+    add_mono_event(sfx_l, sfx_r, 33.45, synth_kick(0.30, 0.65), pan=0.0)
+    add_mono_event(sfx_l, sfx_r, 33.45, synth_snare_hit(0.22, 0.32), pan=0.0)
     for m, pan in [(60, -0.3), (64, -0.1), (67, 0.1), (72, 0.3), (76, 0.0)]:
-        add_mono_event(buf_l, buf_r, 36.85, synth_brass(midi_to_hz(m), 0.9, 0.25), pan=pan)
+        add_mono_event(sfx_l, sfx_r, 33.45, synth_brass(midi_to_hz(m), 0.75, 0.22), pan=pan)
     for idx_b, bm in enumerate([84, 88, 91, 96]):
-        add_mono_event(buf_l, buf_r, 36.90 + idx_b * 0.06, synth_bell(midi_to_hz(bm), 0.85, 0.25), pan=(idx_b - 1.5) * 0.3)
+        add_mono_event(sfx_l, sfx_r, 33.50 + idx_b * 0.055, synth_bell(midi_to_hz(bm), 0.75, 0.22), pan=(idx_b - 1.5) * 0.3)
 
-    # 39.25s: アシスタント「安〜い！」キラリーン効果音
+    # 35.78s: アシスタント「安〜い！」登場キラリーン効果音
     for idx_b, bm in enumerate([79, 84, 88, 96]):
-        add_mono_event(buf_l, buf_r, 39.25 + idx_b * 0.055, synth_bell(midi_to_hz(bm), 0.65, 0.26), pan=(idx_b - 1.5) * 0.25)
+        add_mono_event(sfx_l, sfx_r, 35.78 + idx_b * 0.05, synth_bell(midi_to_hz(bm), 0.55, 0.22), pan=(idx_b - 1.5) * 0.25)
 
-    # 42.0 - 44.8s: 最終案内CTA ジャン・ジャ・ジャーン！終止和音
+    # 40.00s: シーン5 案内カード出現チャイム
+    for idx_b, bm in enumerate([72, 76, 79, 84]):
+        add_mono_event(sfx_l, sfx_r, 40.00 + idx_b * 0.045, synth_bell(midi_to_hz(bm), 0.45, 0.18), pan=(idx_b - 1.5) * 0.2)
+
+    # 46.15 - 47.45s: エンディング ジャン・ジャ・ジャーン！終止和音
     for m in [65, 69, 72]:
-        add_mono_event(buf_l, buf_r, 42.0, synth_brass(midi_to_hz(m), 0.28, 0.22))
+        add_mono_event(sfx_l, sfx_r, 46.15, synth_brass(midi_to_hz(m), 0.24, 0.20))
     for m in [67, 71, 74]:
-        add_mono_event(buf_l, buf_r, 42.32, synth_brass(midi_to_hz(m), 0.28, 0.22))
+        add_mono_event(sfx_l, sfx_r, 46.43, synth_brass(midi_to_hz(m), 0.24, 0.20))
     for m in [60, 64, 67, 72, 76]:
-        add_mono_event(buf_l, buf_r, 42.68, synth_brass(midi_to_hz(m), 1.8, 0.25))
-    add_mono_event(buf_l, buf_r, 42.75, synth_bell(midi_to_hz(84), 1.8, 0.30), pan=-0.2)
-    add_mono_event(buf_l, buf_r, 42.85, synth_bell(midi_to_hz(96), 1.8, 0.24), pan=0.2)
+        add_mono_event(sfx_l, sfx_r, 46.73, synth_brass(midi_to_hz(m), 1.0, 0.24))
+    add_mono_event(sfx_l, sfx_r, 46.78, synth_bell(midi_to_hz(84), 1.0, 0.26), pan=-0.2)
+    add_mono_event(sfx_l, sfx_r, 46.86, synth_bell(midi_to_hz(96), 1.0, 0.22), pan=0.2)
+
+    # ------------------------------------------------------------------
+    # 社長・女性アシスタント 合成音声トラック生成＋スマートBGMダッキング合成
+    # ------------------------------------------------------------------
+    voice_l, voice_r, voice_env = build_voice_track(tts_cache_dir, DURATION)
+    bgm_duck = 1.0 - 0.64 * voice_env
+    sfx_duck = 1.0 - 0.25 * voice_env
+
+    buf_l = voice_l * 1.15 + bgm_l * bgm_duck + sfx_l * sfx_duck
+    buf_r = voice_r * 1.15 + bgm_r * bgm_duck + sfx_r * sfx_duck
 
     # ソフトリミッター（安全なピーク抑制）＆終端フェードアウト
     stereo = np.stack([buf_l, buf_r], axis=1)
     peak = np.max(np.abs(stereo))
     if peak > 0.0:
-        stereo = np.tanh(stereo * 1.15) / np.tanh(1.15) * 0.88
-    fade_n = int(SR * 0.35)
+        stereo = np.tanh(stereo * 1.15) / np.tanh(1.15) * 0.90
+    fade_n = int(SR * 0.28)
     stereo[-fade_n:, :] *= np.linspace(1.0, 0.0, fade_n)[:, None]
 
     pcm16 = np.clip(stereo * 32767.0, -32768, 32767).astype(np.int16)
@@ -272,10 +288,10 @@ def build_audio(out_wav_path: str):
         wf.setsampwidth(2)
         wf.setframerate(SR)
         wf.writeframes(pcm16.tobytes())
-    print(f"Synthesized audio written to {out_wav_path} ({DURATION:.1f}s, 48kHz Stereo)")
+    print(f"Synthesized mixed soundtrack (Voice + BGM + SE) written to {out_wav_path} ({DURATION:.2f}s, 48kHz Stereo)")
 
 
 if __name__ == "__main__":
-    out = os.path.join(os.path.dirname(__file__), "build", "soundtrack_45s.wav")
+    out = os.path.join(os.path.dirname(__file__), "build", "soundtrack_mix.wav")
     build_audio(out)
 

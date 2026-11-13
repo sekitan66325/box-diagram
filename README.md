@@ -73,6 +73,12 @@ box-diagram/
 
 - **[お問い合わせ・ご意見フォーム（Google Forms）](https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform)**
 
+## 開発の応援について（任意）
+
+本ソフトはすべての機能を完全無料でご利用いただけます。もしお役に立ちましたら、励ましのレター等をいただけますと今後の開発の励みになります（応援は完全に任意です）。
+
+- **[OFUSE で応援レターを送る](https://ofuse.me/sekitan66325)**
+
 ---
 
 &copy; 2026 せきたん

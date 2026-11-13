@@ -249,39 +249,51 @@
 <script>
   window.seekTo = function(t) {
     document.getElementById("rays").style.transform = `rotate(${t * 28}deg)`;
-    document.getElementById("topBanner").classList.toggle("show", t >= 0.15);
+    document.getElementById("topBanner").classList.toggle("show", t >= 0.08);
 
     const drum = document.getElementById("drumrollText");
     const price = document.getElementById("priceReveal");
     const punch = document.getElementById("punchlineBox");
+    const subTag = punch.querySelector(".punchline-sub");
 
-    if (t >= 2.0 && t < 4.75) {
+    if (t >= 3.20 && t < 5.45) {
       drum.classList.add("show");
       drum.classList.remove("hide");
       // 小刻みなドラムロール震え演出
-      const shake = (t > 3.6) ? Math.sin(t * 75) * 6 : 0;
-      drum.style.transform = `scale(${t > 3.6 ? 1.08 : 1}) translate(${shake}px, 0)`;
-    } else if (t >= 4.75) {
+      const shake = (t > 4.05) ? Math.sin(t * 75) * 6 : 0;
+      drum.style.transform = `scale(${t > 4.05 ? 1.08 : 1}) translate(${shake}px, 0)`;
+    } else if (t >= 5.45) {
       drum.classList.add("hide");
     } else {
       drum.classList.remove("show", "hide");
     }
 
-    price.classList.toggle("show", t >= 4.85);
-    if (t >= 4.85 && t < 5.3) {
-      const pulse = 1 + Math.sin((t - 4.85) * 14) * 0.04;
+    price.classList.toggle("show", t >= 5.55);
+    if (t >= 5.55 && t < 6.00) {
+      const pulse = 1 + Math.sin((t - 5.55) * 14) * 0.04;
       price.style.transform = `scale(${pulse}) rotate(-1.5deg)`;
-    } else if (t >= 5.3) {
+    } else if (t >= 6.00) {
       price.style.transform = "scale(1) rotate(-1.5deg)";
     }
 
-    punch.classList.toggle("show", t >= 7.25);
+    punch.classList.toggle("show", t >= 7.90);
+    if (subTag) {
+      if (t >= 11.10) {
+        subTag.style.background = "#ffe600";
+        subTag.style.color = "#b30000";
+        subTag.style.transform = "scale(1.12)";
+      } else {
+        subTag.style.background = "#ffffff";
+        subTag.style.color = "#000000";
+        subTag.style.transform = "scale(1)";
+      }
+    }
   };
 
   if (new URLSearchParams(location.search).get("manual") !== "1") {
     const s = performance.now();
     (function loop() {
-      window.seekTo(((performance.now() - s) / 1000) % 10.5);
+      window.seekTo(((performance.now() - s) / 1000) % 12.0);
       requestAnimationFrame(loop);
     })();
   }
