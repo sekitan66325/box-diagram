@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Scene 1 - お悩み提起（Excel罫線作業）</title>
+<link rel="stylesheet" href="./slide_base.css" />
+<style>
+  body { background: #141210; }
+
+  /* スプレッドシート作業領域（モノクロ・セピア調＋少し疲れた雰囲気） */
+  .excel-wrap {
+    position: absolute;
+    inset: 0;
+    filter: sepia(0.72) saturate(0.45) contrast(1.08) brightness(0.92);
+    transform-origin: center center;
+    transition: transform 0.6s ease;
+  }
+
+  .excel-titlebar {
+    height: 44px;
+    background: #185c37;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    font-family: var(--font-ui);
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .excel-ribbon {
+    height: 112px;
+    background: #f3f2f1;
+    border-bottom: 2px solid #c8c6c4;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-family: var(--font-ui);
+    color: #323130;
+  }
+
+  .ribbon-group {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    height: 90px;
+    padding: 4px 16px;
+    border-right: 1px solid #d2d0ce;
+  }
+  .ribbon-btns {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .ribbon-btn {
+    background: #ffffff;
+    border: 1px solid #a19f9d;
+    border-radius: 4px;
+    padding: 7px 14px;
+    font-size: 15px;
+    font-weight: 700;
+    color: #201f1e;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+    transition: background 0.15s, transform 0.1s;
+  }
+  .ribbon-btn.pressed {
+    background: #c7e0f4;
+    border-color: #0078d4;
+    transform: translateY(2px);
+  }
+  .ribbon-label {
+    font-size: 12px;
+    color: #605e5c;
+    text-align: center;
+  }
+
+  .excel-formulabar {
+    height: 38px;
+    background: #ffffff;
+    border-bottom: 1px solid #d2d0ce;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 12px;
+    font-family: "Consolas", monospace;
+    font-size: 16px;
+  }
+  .name-box {
+    width: 110px;
+    border: 1px solid #c8c6c4;
+    padding: 3px 8px;
+    background: #fafafa;
+    font-weight: 700;
+  }
+
+  .sheet-grid {
+    width: 100%;
+    height: 886px;
+    background: #ffffff;
+    overflow: hidden;
+    position: relative;
+  }
+
+  table.xl-table {
+    border-collapse: collapse;
+    width: 1920px;
+    table-layout: fixed;
+    font-family: "MS PGothic", var(--font-ui);
+    font-size: 16px;
+  }
+  table.xl-table th {
+    background: #e6e6e6;
+    border: 1px solid #bfbfbf;
+    color: #444;
+    font-weight: 600;
+    height: 28px;
+    text-align: center;
+  }
+  table.xl-table td {
+    border: 1px solid #dcdcdc;
+    height: 31px;
+    padding: 2px 6px;
+    color: #222;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  td.selected-range {
+    background: rgba(33, 115, 70, 0.16) !important;
+    outline: 2px solid #217346;
+    outline-offset: -1px;
+  }
+  td.has-hand-border-b {
+    border-bottom: 3px solid #111111 !important;
+  }
+  td.has-hand-border-r {
+    border-right: 3px solid #111111 !important;
+  }
+  td.misaligned-mess {
+    background: #fff5f5;
+    border: 2px dashed #aa0000 !important;
+    color: #990000;
+    font-weight: 700;
+  }
+
+  /* コンテキストメニュー（図面作成でよく開く面倒なウィンドウ演出） */
+  .xl-dialog {
+    position: absolute;
+    left: 690px;
+    top: 290px;
+    width: 470px;
+    background: #f0f0f0;
+    border: 2px solid #666;
+    box-shadow: 10px 14px 30px rgba(0,0,0,0.45);
+    font-family: var(--font-ui);
+    padding: 14px;
+    z-index: 25;
+    opacity: 0;
+    transform: scale(0.95);
+    transition: opacity 0.2s, transform 0.2s;
+  }
+  .xl-dialog.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .xl-dialog-title {
+    font-weight: 700;
+    font-size: 15px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+  .xl-dialog-body {
+    font-size: 14px;
+    color: #333;
+    line-height: 1.7;
+  }
+  .xl-error-toast {
+    position: absolute;
+    left: 560px;
+    top: 470px;
+    background: #2b2b2b;
+    color: #ffdf5d;
+    border: 3px solid #ff4d4d;
+    padding: 14px 24px;
+    font-family: var(--font-ui);
+    font-size: 20px;
+    font-weight: 700;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.6);
+    opacity: 0;
+    z-index: 30;
+  }
+  .xl-error-toast.visible { opacity: 1; }
+
+  /* クリック波紋 */
+  .click-ring {
+    position: absolute;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    border: 5px solid #e60012;
+    transform: translate(-50%, -50%) scale(0.3);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 199;
+  }
+  .click-ring.pop {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1.25);
+    transition: transform 0.28s ease-out, opacity 0.28s ease-out;
+  }
+
+  /* 昭和〜平成通販風テロップ（カラー鮮明・画面最前面） */
+  .telop-layer {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 120;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 88px 68px 46px;
+  }
+
+  .top-telop-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(-22px) scale(0.95);
+    transition: opacity 0.22s ease, transform 0.25s cubic-bezier(0.2, 1.3, 0.4, 1);
+  }
+  .top-telop-box.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .bottom-telop-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+    transform: translateY(22px) scale(0.95);
+    transition: opacity 0.22s ease, transform 0.25s cubic-bezier(0.2, 1.3, 0.4, 1);
+  }
+  .bottom-telop-box.show {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .telop-grad-yellow {
+    font-family: var(--font-gothic);
+    font-size: 74px;
+    font-weight: 900;
+    background: linear-gradient(180deg, #ffffff 0%, #fff04d 45%, #ff9900 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 5px 0 #000) drop-shadow(5px 0 0 #000) drop-shadow(-5px 0 0 #000) drop-shadow(0 -5px 0 #000) drop-shadow(8px 10px 8px rgba(0,0,0,0.8));
+    letter-spacing: 0.02em;
+  }
+
+  .telop-white-red {
+    font-family: var(--font-gothic);
+    font-size: 62px;
+    font-weight: 900;
+    color: #ffffff;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 16px #b3000c;
+    filter: drop-shadow(0 5px 0 #000) drop-shadow(0 0 14px rgba(0,0,0,0.75));
+  }
+
+  .telop-shock {
+    font-family: var(--font-gothic);
+    font-size: 76px;
+    font-weight: 900;
+    background: linear-gradient(180deg, #fff566 0%, #ff3b30 55%, #b30000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 5px 0 #ffffff) drop-shadow(5px 0 0 #ffffff) drop-shadow(-5px 0 0 #ffffff) drop-shadow(0 -5px 0 #ffffff) drop-shadow(9px 10px 0 #000000);
+  }
+
+  /* 右上テレビ通販風「お悩み」コーナーラベル */
+  .corner-stamp {
+    position: absolute;
+    top: 22px;
+    left: 28px;
+    z-index: 125;
+    background: linear-gradient(135deg, #2b2b2b, #525252);
+    border: 4px solid #ffe600;
+    border-radius: 10px;
+    padding: 6px 16px;
+    color: #ffe600;
+    font-size: 24px;
+    font-weight: 900;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.6);
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <!-- 画面奥：Excel苦行 UI（実ブラウザ操作再現） -->
+  <div class="excel-wrap" id="excelWrap">
+    <div class="excel-titlebar">
+      <span>📊 車両運用表_手作業版_修正14回目_最終コピー(2).xlsx - Excel</span>
+      <span>自動保存: オフ | 行の高さ・セル結合 調整中...</span>
+    </div>
+
+    <div class="excel-ribbon">
+      <div class="ribbon-group">
+        <div class="ribbon-btns">
+          <button class="ribbon-btn" id="btnBorder">⊞ 下罫線 ▼</button>
+          <button class="ribbon-btn" id="btnMerge">◫ セルを結合して中央揃え</button>
+        </div>
+        <div class="ribbon-label">配置 / フォント（手作業）</div>
+      </div>
+      <div class="ribbon-group">
+        <div class="ribbon-btns">
+          <button class="ribbon-btn" id="btnRowHeight">↕ 行の高さ: 9.75pt</button>
+          <button class="ribbon-btn" id="btnColWidth">↔ 列の幅: 手動</button>
+        </div>
+        <div class="ribbon-label">セルのサイズ</div>
+      </div>
+      <div class="ribbon-group">
+        <div class="ribbon-btns">
+          <button class="ribbon-btn" id="btnPrintCheck">🖨 印刷プレビュー (はみ出し注意)</button>
+        </div>
+        <div class="ribbon-label">ページ設定</div>
+      </div>
+    </div>
+
+    <div class="excel-formulabar">
+      <div class="name-box" id="nameBox">D7:J7</div>
+      <span>fx</span>
+      <span id="formulaText" style="color:#444;">104(A1+A11) ※セル結合解除すると文字ズレ注意</span>
+    </div>
+
+    <div class="sheet-grid">
+      <table class="xl-table" id="xlTable">
+        <thead>
+          <tr>
+            <th style="width:48px;"></th>
+            <th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th><th>I</th><th>J</th><th>K</th><th>L</th>
+          </tr>
+        </thead>
+        <tbody id="xlBody"></tbody>
+      </table>
+
+      <!-- 書式設定ダイアログ風ポップアップ -->
+      <div class="xl-dialog" id="xlDialog">
+        <div class="xl-dialog-title">セルの書式設定 - 罫線（1本ずつ指定）</div>
+        <div class="xl-dialog-body">
+          ☑ 上線・太字黒 &nbsp;&nbsp; ☐ 破線（回送用）<br>
+          ☐ 斜線 &nbsp;&nbsp; ☑ 列幅に合わせる（文字切れ防止）<br>
+          <small style="color:#666;">※ 途中で1駅増やすと全列の結合し直しになります…</small>
+        </div>
+      </div>
+
+      <!-- お悩みエラー吹き出し -->
+      <div class="xl-error-toast" id="xlError">
+        ⚠ 「結合されたセルの一部を変更することはできません。」
+      </div>
+    </div>
+  </div>
+
+  <!-- マウスカーソル（ブラウザ実クリック演出） -->
+  <svg class="fake-cursor" id="fakeCursor" viewBox="0 0 24 24" style="left:600px; top:380px;">
+    <path d="M3 2L20 13L12.5 14.5L15.5 21.5L13 22.5L10 15.5L4.5 20V2Z" fill="#ffffff" stroke="#000000" stroke-width="1.8"/>
+  </svg>
+  <div class="click-ring" id="clickRing"></div>
+
+  <div class="retro-vignette"></div>
+  <div class="corner-stamp">😓 車両運用表づくりの「お悩み」</div>
+
+  <!-- 通販掛け合いテロップ（ユーザー指定文言） -->
+  <div class="telop-layer">
+    <div class="top-telop-box" id="topTelop">
+      <span class="speaker-pill speaker-shacho" id="topSpeaker">🎙 社長の声</span>
+      <div class="telop-grad-yellow" id="topText">ダイヤ好きのマニアの皆さん！</div>
+    </div>
+
+    <div class="bottom-telop-box" id="botTelop">
+      <span class="speaker-pill speaker-assistant" id="botSpeaker" style="display:none;">💬 アシスタント</span>
+      <div class="telop-white-red" id="botText">Excelでポチポチ線引いて、セル結合とかしちゃって…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // スプレッドシートのセル生成
+  const tbody = document.getElementById("xlBody");
+  const sampleTexts = {
+    "2-2": "桜川", "2-5": "美咲町", "2-8": "楓ヶ丘", "2-11": "青山温泉",
+    "4-1": "A1運用", "4-4": "5:30", "4-5": "101", "4-7": "6:12",
+    "6-1": "折返し", "6-4": "6:28", "6-5": "102(A1+A2)", "6-10": "7:14",
+    "9-1": "変A11", "9-3": "途中結合ズレ？", "11-5": "罫線引き直し..."
+  };
+  for (let r = 1; r <= 24; r++) {
+    const tr = document.createElement("tr");
+    const th = document.createElement("th");
+    th.textContent = r;
+    tr.appendChild(th);
+    for (let c = 1; c <= 12; c++) {
+      const td = document.createElement("td");
+      td.id = `cell-${r}-${c}`;
+      td.textContent = sampleTexts[`${r}-${c}`] || "";
+      tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+
+  function clickEffectAt(x, y) {
+    const cursor = document.getElementById("fakeCursor");
+    const ring = document.getElementById("clickRing");
+    cursor.style.left = x + "px";
+    cursor.style.top = y + "px";
+    ring.style.left = x + "px";
+    ring.style.top = y + "px";
+    ring.classList.remove("pop");
+    void ring.offsetWidth;
+    ring.classList.add("pop");
+  }
+
+  // タイムライン制御 (t in 0.0 .. 10.0 sec)
+  window.seekTo = function(t) {
+    // 要素取得
+    const btnBorder = document.getElementById("btnBorder");
+    const btnMerge = document.getElementById("btnMerge");
+    const xlDialog = document.getElementById("xlDialog");
+    const xlError = document.getElementById("xlError");
+    const topTelop = document.getElementById("topTelop");
+    const botTelop = document.getElementById("botTelop");
+    const topSpeaker = document.getElementById("topSpeaker");
+    const botSpeaker = document.getElementById("botSpeaker");
+    const topText = document.getElementById("topText");
+    const botText = document.getElementById("botText");
+
+    // セル初期化
+    document.querySelectorAll("#xlBody td").forEach(td => {
+      td.classList.remove("selected-range", "has-hand-border-b", "has-hand-border-r", "misaligned-mess");
+    });
+    btnBorder.classList.remove("pressed");
+    btnMerge.classList.remove("pressed");
+    xlDialog.classList.remove("visible");
+    xlError.classList.remove("visible");
+
+    // セル選択＆手作業ステップ (0s -> 10s)
+    if (t >= 0.6) {
+      for (let c = 2; c <= 8; c++) document.getElementById(`cell-4-${c}`).classList.add("selected-range");
+    }
+    if (t >= 1.5 && t < 2.3) btnBorder.classList.add("pressed");
+    if (t >= 2.0) {
+      for (let c = 2; c <= 8; c++) document.getElementById(`cell-4-${c}`).classList.add("has-hand-border-b");
+    }
+    if (t >= 2.8) {
+      for (let c = 3; c <= 9; c++) document.getElementById(`cell-6-${c}`).classList.add("selected-range");
+    }
+    if (t >= 3.5 && t < 4.5) btnMerge.classList.add("pressed");
+    if (t >= 4.7 && t < 7.0) xlDialog.classList.add("visible");
+    if (t >= 6.8) {
+      document.getElementById("cell-9-3").classList.add("misaligned-mess");
+      document.getElementById("cell-9-4").classList.add("misaligned-mess");
+      xlError.classList.add("visible");
+    }
+
+    // カーソル連続軌道
+    const cursor = document.getElementById("fakeCursor");
+    if (t < 1.2) { cursor.style.left = "420px"; cursor.style.top = "310px"; }
+    else if (t < 2.5) { cursor.style.left = "96px"; cursor.style.top = "92px"; }
+    else if (t < 3.4) { cursor.style.left = "740px"; cursor.style.top = "374px"; }
+    else if (t < 4.8) { cursor.style.left = "265px"; cursor.style.top = "92px"; }
+    else if (t < 7.2) { cursor.style.left = "815px"; cursor.style.top = "395px"; }
+    else { cursor.style.left = "760px"; cursor.style.top = "510px"; }
+
+    // テロップ「間（ま）」のタイムライン
+    // 0.3s〜3.2s: 「ダイヤ好きのマニアの皆さん！」
+    // 3.3s〜6.5s: 「Excelでポチポチ線引いて、セル結合とかしちゃって…」
+    // 6.6s〜8.1s: 社長「気が利かないねぇ〜…」（間）
+    // 8.2s〜10.0s: 女性アシスタント「面倒じゃありませんか！」
+    if (t >= 0.3) {
+      topTelop.classList.add("show");
+      if (t >= 6.6) {
+        topSpeaker.textContent = "🎙 社長（ぼやき）";
+        topText.textContent = "気が利かないねぇ〜…";
+      } else {
+        topSpeaker.textContent = "🎙 社長";
+        topText.textContent = "ダイヤ好きのマニアの皆さん！";
+      }
+    } else {
+      topTelop.classList.remove("show");
+    }
+
+    if (t >= 3.3 && t < 6.5) {
+      botTelop.classList.add("show");
+      botSpeaker.style.display = "none";
+      botText.className = "telop-white-red";
+      botText.textContent = "Excelでポチポチ線引いて、セル結合とかしちゃって…";
+    } else if (t >= 8.2) {
+      botTelop.classList.add("show");
+      botSpeaker.style.display = "inline-flex";
+      botSpeaker.textContent = "💐 女性アシスタント";
+      botText.className = "telop-shock";
+      botText.textContent = "面倒じゃありませんか！";
+    } else {
+      botTelop.classList.remove("show");
+    }
+  };
+
+  // 単体ブラウザプレビュー時の自動再生
+  if (new URLSearchParams(location.search).get("manual") !== "1") {
+    const start = performance.now();
+    function loop() {
+      const t = ((performance.now() - start) / 1000) % 10.5;
+      window.seekTo(t);
+      requestAnimationFrame(loop);
+    }
+    loop();
+  }
+</script>
+</body>
+</html>
+

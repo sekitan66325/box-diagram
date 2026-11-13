@@ -754,8 +754,8 @@ class BoxDiagramTableEditor {
       <div class="tab-toolbar">
         <span class="section-title-sm">駅マスタ (全 ${stations.length} 駅)</span>
         <div class="action-buttons">
-          <button id="btnResetMain3Stations" class="btn btn-sm btn-secondary" title="下館・真岡・茂木の3駅にリセット">主要3駅にリセット</button>
-          <button id="btnLoadAllMokaStations" class="btn btn-sm btn-secondary" title="全17駅を展開">真岡鐵道全17駅</button>
+          <button id="btnResetMain3Stations" class="btn btn-sm btn-secondary" title="桜川・美咲町・楓ヶ丘・青山温泉の主要4駅にリセット">主要4駅にリセット</button>
+          <button id="btnLoadAllSampleStations" class="btn btn-sm btn-secondary" title="全10駅を展開">サンプル全10駅</button>
           <button id="btnAddStation" class="btn btn-sm btn-primary">＋ 駅追加</button>
         </div>
       </div>
@@ -1339,11 +1339,11 @@ class BoxDiagramTableEditor {
         });
       }
 
-      const btnAllMoka = this.container.querySelector("#btnLoadAllMokaStations");
-      if (btnAllMoka) {
-        btnAllMoka.addEventListener("click", () => {
+      const btnAllSample = this.container.querySelector("#btnLoadAllSampleStations");
+      if (btnAllSample) {
+        btnAllSample.addEventListener("click", () => {
           this.model.mutate("stations-reset", () => {
-            this.model.data.stations = JSON.parse(JSON.stringify(MOKA_ALL_STATIONS));
+            this.model.data.stations = JSON.parse(JSON.stringify(FICTIONAL_ALL_STATIONS));
             this.model.recalculateStationX();
           });
         });

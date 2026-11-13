@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Scene 4 - 衝撃の価格発表（オチ）</title>
+<link rel="stylesheet" href="./slide_base.css" />
+<style>
+  body { background: #b8000c; }
+
+  .shock-burst {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.45) 0%, rgba(255,230,0,0.18) 38%, rgba(160,0,0,0.55) 100%);
+    z-index: 5;
+  }
+
+  .inner-frame {
+    position: absolute;
+    inset: 32px;
+    border: 14px solid #ffe600;
+    box-shadow: 0 0 0 8px #000000, inset 0 0 0 8px #000000;
+    border-radius: 26px;
+    z-index: 15;
+    pointer-events: none;
+  }
+
+  .stage-content {
+    position: relative;
+    z-index: 25;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 58px 70px 54px;
+  }
+
+  /* 1段階目：インストール不要帯 */
+  .top-banner {
+    background: linear-gradient(180deg, #1d4ed8 0%, #0a1f63 100%);
+    border: 7px solid #ffffff;
+    border-radius: 20px;
+    padding: 16px 48px;
+    color: #ffe600;
+    font-size: 54px;
+    font-weight: 900;
+    box-shadow: 0 0 0 6px #000, 0 14px 28px rgba(0,0,0,0.6);
+    paint-order: stroke fill;
+    -webkit-text-stroke: 8px #000;
+    opacity: 0;
+    transform: translateY(-28px);
+    transition: all 0.25s cubic-bezier(0.2, 1.35, 0.4, 1);
+  }
+  .top-banner.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* 中央ステージ */
+  .center-zone {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    min-height: 520px;
+  }
+
+  /* 「気になるお値段は…なんと！」 */
+  .drumroll-text {
+    position: absolute;
+    text-align: center;
+    font-size: 98px;
+    font-weight: 900;
+    color: #ffffff;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 24px #000000;
+    filter: drop-shadow(0 10px 0 #7a0008);
+    opacity: 0;
+    transform: scale(0.8);
+    transition: all 0.25s ease;
+  }
+  .drumroll-text.show {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .drumroll-text.hide {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+
+  /* 特大「無 料 ！（0円）」パネル */
+  .price-reveal {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: scale(0.4) rotate(-6deg);
+    transition: all 0.34s cubic-bezier(0.14, 1.48, 0.4, 1);
+  }
+  .price-reveal.show {
+    opacity: 1;
+    transform: scale(1) rotate(-1.5deg);
+  }
+
+  .price-board {
+    position: relative;
+    background: linear-gradient(180deg, #ffffff 0%, #fff7cc 100%);
+    border: 14px solid #e60012;
+    border-radius: 44px;
+    padding: 26px 96px 24px;
+    box-shadow: 0 0 0 12px #000000, 0 28px 0 #000000, 0 42px 70px rgba(0,0,0,0.75);
+    text-align: center;
+  }
+
+  .mega-free {
+    font-family: var(--font-gothic);
+    font-size: 220px;
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: 0.08em;
+    background: linear-gradient(180deg, #ff3b30 0%, #e60012 52%, #850000 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    filter:
+      drop-shadow(0 8px 0 #ffe600)
+      drop-shadow(8px 0 0 #ffe600)
+      drop-shadow(-8px 0 0 #ffe600)
+      drop-shadow(0 -8px 0 #ffe600)
+      drop-shadow(12px 14px 0 #000000);
+  }
+
+  .zero-yen-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    margin-top: 4px;
+  }
+  .zero-yen-pill {
+    background: #000000;
+    color: #ffe600;
+    border: 6px solid #ffe600;
+    border-radius: 999px;
+    padding: 6px 46px;
+    font-size: 92px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    box-shadow: 0 8px 0 rgba(0,0,0,0.45);
+  }
+  .zero-stamp {
+    background: #ffe600;
+    color: #b30000;
+    border: 6px solid #000000;
+    border-radius: 18px;
+    padding: 8px 26px;
+    font-size: 40px;
+    font-weight: 900;
+    transform: rotate(6deg);
+    box-shadow: 6px 6px 0 #000000;
+  }
+
+  /* オチ掛け合い（「え〜っ、無料なんですか〜？ 安〜い！（※無料です）」） */
+  .punchline-box {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0;
+    transform: translateY(34px);
+    transition: all 0.25s cubic-bezier(0.2, 1.35, 0.4, 1);
+  }
+  .punchline-box.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .punchline-bubble {
+    background: linear-gradient(180deg, #ff2e7a 0%, #c80048 100%);
+    border: 8px solid #ffffff;
+    border-radius: 26px;
+    padding: 16px 46px;
+    box-shadow: 0 0 0 6px #000, 0 12px 24px rgba(0,0,0,0.65);
+    display: flex;
+    align-items: center;
+    gap: 22px;
+  }
+  .punchline-main {
+    font-size: 58px;
+    font-weight: 900;
+    color: #ffe600;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 12px #000000;
+  }
+  .punchline-sub {
+    background: #ffffff;
+    color: #000000;
+    border: 4px solid #000000;
+    border-radius: 12px;
+    padding: 6px 18px;
+    font-size: 36px;
+    font-weight: 900;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="radial-rays" id="rays"></div>
+  <div class="shock-burst"></div>
+  <div class="inner-frame"></div>
+  <div class="retro-vignette"></div>
+
+  <div class="stage-content">
+    <div class="top-banner" id="topBanner">
+      ⚡ インストール不要！ブラウザですぐ使える！
+    </div>
+
+    <div class="center-zone">
+      <div class="drumroll-text" id="drumrollText">
+        気になるお値段は…なんと！
+      </div>
+
+      <div class="price-reveal" id="priceReveal">
+        <div class="price-board">
+          <div class="mega-free">無 料 ！</div>
+          <div class="zero-yen-row">
+            <span class="zero-yen-pill">（ 0 円 ）</span>
+            <span class="zero-stamp">追加課金<br>一切なし！</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="punchline-box" id="punchlineBox">
+      <span class="speaker-pill speaker-assistant">💬 アシスタント</span>
+      <div class="punchline-bubble">
+        <span class="punchline-main">「え〜っ、無料なんですか〜？ 安〜い！」</span>
+        <span class="punchline-sub">※無料です</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.seekTo = function(t) {
+    document.getElementById("rays").style.transform = `rotate(${t * 28}deg)`;
+    document.getElementById("topBanner").classList.toggle("show", t >= 0.15);
+
+    const drum = document.getElementById("drumrollText");
+    const price = document.getElementById("priceReveal");
+    const punch = document.getElementById("punchlineBox");
+
+    if (t >= 2.0 && t < 4.75) {
+      drum.classList.add("show");
+      drum.classList.remove("hide");
+      // 小刻みなドラムロール震え演出
+      const shake = (t > 3.6) ? Math.sin(t * 75) * 6 : 0;
+      drum.style.transform = `scale(${t > 3.6 ? 1.08 : 1}) translate(${shake}px, 0)`;
+    } else if (t >= 4.75) {
+      drum.classList.add("hide");
+    } else {
+      drum.classList.remove("show", "hide");
+    }
+
+    price.classList.toggle("show", t >= 4.85);
+    if (t >= 4.85 && t < 5.3) {
+      const pulse = 1 + Math.sin((t - 4.85) * 14) * 0.04;
+      price.style.transform = `scale(${pulse}) rotate(-1.5deg)`;
+    } else if (t >= 5.3) {
+      price.style.transform = "scale(1) rotate(-1.5deg)";
+    }
+
+    punch.classList.toggle("show", t >= 7.25);
+  };
+
+  if (new URLSearchParams(location.search).get("manual") !== "1") {
+    const s = performance.now();
+    (function loop() {
+      window.seekTo(((performance.now() - s) / 1000) % 10.5);
+      requestAnimationFrame(loop);
+    })();
+  }
+</script>
+</body>
+</html>
+

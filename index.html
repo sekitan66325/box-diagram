@@ -18,14 +18,15 @@
     <header class="app-header">
       <div class="brand">
         <span class="brand-title">箱ダイヤ描画システム</span>
+        <span class="beta-badge" title="一般公開 β版">β版</span>
       </div>
 
       <div class="header-actions">
         <!-- プリセット選択 -->
         <select id="presetSelect" class="form-select" style="width: 280px; font-weight: 500;">
-          <option value="moka14">真岡鐵道 モオカ14形 (全3ページ・全20運用完全版)</option>
-          <option value="de10">真岡鐵道 DE10 1535 (回送・重連・SL後押し)</option>
-          <option value="sl_pc">真岡鐵道 C1266＋50系客車 (SL・客車)</option>
+          <option value="sakuragawa_main">桜川電鉄 本線（全機能体験フルサンプル・2ページ）</option>
+          <option value="sakuragawa_exp">桜川電鉄 特急・回送・試運転サンプル</option>
+          <option value="midorikawa_compact">緑川鉄道 支線（コンパクト構成サンプル）</option>
         </select>
 
         <!-- 元に戻す / やり直し -->
@@ -140,7 +141,7 @@
               <span class="step-badge">1</span>
               <div>
                 <strong>サンプルを選ぶ・データを開く</strong>
-                <p>上部のプルダウンからサンプルデータ（モオカ14形 / DE10 / C1266+50系客車）を選ぶか、<code>読込 (JSON)</code> から保存済みデータを読み込みます。</p>
+                <p>上部のプルダウンからサンプルデータ（桜川電鉄 本線 / 特急・回送・試運転 / 緑川鉄道 支線）を選ぶか、<code>読込 (JSON)</code> から保存済みデータを読み込みます。</p>
               </div>
             </div>
             <div class="help-step">
@@ -194,7 +195,7 @@
               </tr>
               <tr>
                 <td><strong>駅マスタ</strong></td>
-                <td>路線内の駅一覧を管理します。「表示」チェックを切り替えると図面上に縦基準線を引き、駅間のX座標を自動再配置します。真岡鐵道の主要3駅リセット／全17駅展開ボタンや、自由な駅追加・並び替えに対応しています。</td>
+                <td>路線内の駅一覧を管理します。「表示」チェックを切り替えると図面上に縦基準線を引き、駅間のX座標を自動再配置します。主要4駅リセット／サンプル全10駅展開ボタンや、自由な駅追加・並び替えに対応しています。</td>
               </tr>
               <tr>
                 <td><strong>注記</strong></td>
@@ -227,7 +228,7 @@
             <li><strong><code>Alt</code> + ドラッグで列車線に自動吸着</strong>：
               <ul class="help-sublist">
                 <li><strong>上側／下側スナップ</strong>：ドラッグ中に <code>Alt</code> キーを押すと、近くの列車線の<strong>上側</strong>または<strong>下側</strong>の基準位置へ自動吸着します（青緑の補助ガイド線が表示されます）。</li>
-                <li><strong>左端／中央／右端揃えスナップ</strong>：線の左端や各駅の基準線だけでなく、駅線手前（真岡・茂木など）への<strong>右端揃え</strong>や線区間の中央揃えにも吸着します。</li>
+                <li><strong>左端／中央／右端揃えスナップ</strong>：線の左端や各駅の基準線だけでなく、駅線手前（終着駅など）への<strong>右端揃え</strong>や線区間の中央揃えにも吸着します。</li>
                 <li><strong>ドラッグ中の Alt 解除</strong>：<code>Alt</code> キーを先に離してもその吸着位置を起点に飛び跳ねず滑らかに微調整できます（そのままマウスを離せば吸着位置に確定します）。</li>
               </ul>
             </li>

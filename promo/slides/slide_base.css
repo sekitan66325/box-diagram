@@ -1,0 +1,154 @@
+/* ============================================================================
+   夢グループ風 通販CM 共通スタイル (1920x1080 Full HD 固定キャンバス)
+   文言やデザインをHTMLから直接調整できるよう、シンプルなCSS変数とユーティリティで構成
+   ============================================================================ */
+:root {
+  --canvas-w: 1920px;
+  --canvas-h: 1080px;
+
+  /* 昭和〜平成初期のインパクト重視フォントスタック */
+  --font-gothic: "HG創英角ゴシックUB", "HGS創英角ゴシックUB", "HG創英角ポップ体", "Noto Sans JP", "BIZ UDPGothic", "Meiryo", sans-serif;
+  --font-mincho: "HG明朝E", "HGS明朝E", "Noto Serif JP", "Yu Mincho", "MS PMincho", serif;
+  --font-pop: "HG創英角ポップ体", "HGS創英角ポップ体", "HG創英角ゴシックUB", "Noto Sans JP", sans-serif;
+  --font-ui: "Yu Gothic UI", "Meiryo", "Noto Sans JP", sans-serif;
+
+  /* 夢グループ風アクセントカラー */
+  --yume-red: #e60012;
+  --yume-dark-red: #900008;
+  --yume-yellow: #ffe600;
+  --yume-gold: #ffae00;
+  --yume-blue: #0038a8;
+  --yume-pink: #ff2e7a;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  overflow: hidden;
+  background: transparent;
+  font-family: var(--font-gothic);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+.stage {
+  position: relative;
+  width: var(--canvas-w);
+  height: var(--canvas-h);
+  overflow: hidden;
+}
+
+/* 極太フチ文字ユーティリティ（丸みのある多重アウトライン） */
+.stroke-black {
+  paint-order: stroke fill;
+  -webkit-text-stroke: 14px #000000;
+  text-shadow: 6px 6px 0 #000000;
+}
+
+.stroke-black-lg {
+  paint-order: stroke fill;
+  -webkit-text-stroke: 22px #000000;
+  text-shadow: 10px 10px 0 rgba(0, 0, 0, 0.85);
+}
+
+.stroke-white-black {
+  paint-order: stroke fill;
+  -webkit-text-stroke: 16px #ffffff;
+  filter: drop-shadow(0 0 0 #000) drop-shadow(4px 0 0 #000) drop-shadow(-4px 0 0 #000) drop-shadow(0 4px 0 #000) drop-shadow(0 -4px 0 #000) drop-shadow(8px 8px 6px rgba(0,0,0,0.65));
+}
+
+/* 赤×黄 集中線 (背景レイヤー用) */
+.radial-rays {
+  position: absolute;
+  inset: -45%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    #fff34f 0deg 8deg,
+    #ff8800 8deg 14deg,
+    #e60012 14deg 22deg,
+    #ffb700 22deg 28deg
+  );
+  animation: spinSlow 24s linear infinite;
+}
+
+.radial-rays-soft {
+  position: absolute;
+  inset: -45%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    #fffae0 0deg 10deg,
+    #ffe169 10deg 20deg
+  );
+  animation: spinSlow 32s linear infinite;
+}
+
+@keyframes spinSlow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 通販テロップの基本ボックス */
+.telop-band {
+  position: relative;
+  display: inline-block;
+  text-align: center;
+  line-height: 1.22;
+}
+
+/* 話者タグ（社長 / 女性アシスタント風の茶目っ気あるバッジ） */
+.speaker-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 20px;
+  border-radius: 999px;
+  border: 4px solid #ffffff;
+  font-size: 26px;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.06em;
+  box-shadow: 0 6px 0 #000000, 0 10px 18px rgba(0, 0, 0, 0.45);
+}
+
+.speaker-shacho {
+  background: linear-gradient(180deg, #1d4ed8 0%, #0f172a 100%);
+}
+
+.speaker-assistant {
+  background: linear-gradient(180deg, #ff4d8d 0%, #be123c 100%);
+}
+
+/* 昭和〜平成ブラウン管・VHS風のほのかな雰囲気フレーム（任意オーバーレイ） */
+.retro-vignette {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(0, 0, 0, 0.03) 0px,
+      rgba(0, 0, 0, 0.03) 2px,
+      transparent 2px,
+      transparent 4px
+    ),
+    radial-gradient(circle at center, transparent 58%, rgba(0, 0, 0, 0.38) 100%);
+  z-index: 90;
+}
+
+/* デモ用擬似マウスカーソル（シーン1/3で使用） */
+.fake-cursor {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  z-index: 200;
+  pointer-events: none;
+  filter: drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.5));
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+

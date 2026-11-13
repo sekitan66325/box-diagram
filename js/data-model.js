@@ -31,7 +31,7 @@ class BoxDiagramDataModel {
     const d = {
       version: raw.version || "2.0",
       metadata: Object.assign({
-        title: "真岡鐵道 モオカ14形",
+        title: "桜川電鉄 サクラ2000形 (全機能サンプル)",
         copyright: "(C) 2026 せきたん",
         updatedAt: new Date().toISOString().split("T")[0]
       }, raw.metadata || {}),
@@ -64,7 +64,7 @@ class BoxDiagramDataModel {
             visible: s.visible !== false,
             x: typeof s.x === "number" ? s.x : 200 + idx * 200
           }))
-        : JSON.parse(JSON.stringify(MOKA_ALL_STATIONS.slice(0, 3))),
+        : JSON.parse(JSON.stringify(FICTIONAL_ALL_STATIONS.filter(s => s.visible !== false))),
       trainTypes: Array.isArray(raw.trainTypes) && raw.trainTypes.length > 0
         ? raw.trainTypes.map(t => ({
             id: t.id || "local",
@@ -334,10 +334,8 @@ class BoxDiagramDataModel {
 
   resetMainStations() {
     this.mutate("stations-reset", () => {
-      this.data.stations = JSON.parse(JSON.stringify(MOKA_ALL_STATIONS.slice(0, 3)));
-      this.data.stations[0].x = 200.32;
-      this.data.stations[1].x = 593.92;
-      this.data.stations[2].x = 987.52;
+      this.data.stations = JSON.parse(JSON.stringify(FICTIONAL_ALL_STATIONS.filter(s => s.visible !== false)));
+      this.recalculateStationX();
     });
   }
 
@@ -659,10 +657,14 @@ class BoxDiagramDataModel {
     const lastIdx = (typeof insertAt === "number" && insertAt > 0) ? Math.min(insertAt - 1, r.trains.length - 1) : r.trains.length - 1;
     const lastTrain = lastIdx >= 0 ? r.trains[lastIdx] : null;
     
-    const defaultFrom = lastTrain ? lastTrain.toStation : (this.data.stations[0] ? this.data.stations[0].id : "shimodate");
+    const visible = this.getVisibleStations();
+    const firstSt = (visible[0] && visible[0].id) || (this.data.stations[0] ? this.data.stations[0].id : "sakuragawa");
+    const lastSt = (visible[visible.length - 1] && visible[visible.length - 1].id) || (this.data.stations[this.data.stations.length - 1] ? this.data.stations[this.data.stations.length - 1].id : "aoyamaonsen");
+
+    const defaultFrom = lastTrain ? lastTrain.toStation : firstSt;
     const defaultTo = lastTrain
-      ? (lastTrain.toStation === "shimodate" ? "motegi" : (lastTrain.toStation === "motegi" ? "moka" : "shimodate"))
-      : (this.data.stations[this.data.stations.length - 1] ? this.data.stations[this.data.stations.length - 1].id : "motegi");
+      ? (lastTrain.toStation === firstSt ? lastSt : firstSt)
+      : lastSt;
     
     let defaultDepTime = "";
     if (lastTrain && lastTrain.arrTime) {

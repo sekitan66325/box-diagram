@@ -14,8 +14,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const dataModel = new BoxDiagramDataModel();
   window.dataModel = dataModel; // テスト・デバッグ用グローバル参照
 
-  // 初期プリセットの読み込み (moka14)
-  dataModel.load(PRESET_MOKA14);
+  // 初期プリセットの読み込み (sakuragawa_main)
+  dataModel.load(PRESET_SAKURAGAWA_MAIN);
 
   const editorContainer = document.getElementById("editorPane");
   const tableEditor = new BoxDiagramTableEditor(editorContainer, dataModel);
@@ -558,12 +558,12 @@ document.addEventListener("DOMContentLoaded", () => {
   // プリセット切り替え
   presetSelect.addEventListener("change", (e) => {
     const val = e.target.value;
-    if (val === "moka14") {
-      dataModel.load(PRESET_MOKA14);
-    } else if (val === "de10") {
-      dataModel.load(PRESET_DE10);
-    } else if (val === "sl_pc") {
-      dataModel.load(PRESET_SL_PC);
+    if (val === "sakuragawa_main") {
+      dataModel.load(PRESET_SAKURAGAWA_MAIN);
+    } else if (val === "sakuragawa_exp") {
+      dataModel.load(PRESET_SAKURAGAWA_EXPRESS);
+    } else if (val === "midorikawa_compact") {
+      dataModel.load(PRESET_MIDORIKAWA_COMPACT);
     }
     tableEditor.setActiveRoster(null);
   });

@@ -1,28 +1,23 @@
 /**
  * 鉄道車両運用表（箱ダイヤ）サンプルプリセットデータ
- * 
- * 参照PDF（moka14.pdf, dl.pdf, sl-pc.pdf）および元Excel（車両運用_箱ダイヤ.xlsm）完全準拠
+ *
+ * 一般公開（β版）向け 架空路線ショウケースデータ
+ * 折り返し・途中駅部分継走（1行/0行）・選択式連結位置・3両編成・自動同期・
+ * 多彩な列車種別/線種・発着記号4種・自由注記・用紙/駅ヘッダー設定まで全機能を体感できます。
  */
 
-// 真岡鐵道全17駅マスタ定義（デフォルトは主要3駅 下館・真岡・茂木 が表示）
-const MOKA_ALL_STATIONS = [
-  { id: "shimodate", name: "下館", abbr: "下", visible: true, x: 200.32 },
-  { id: "higashi-shimodate", name: "東下館", abbr: "東", visible: false, x: 249.52 },
-  { id: "orimoto", name: "折本", abbr: "折", visible: false, x: 298.72 },
-  { id: "higureashi", name: "ひぐらし", abbr: "ひ", visible: false, x: 347.92 },
-  { id: "kugeta", name: "久下田", abbr: "久", visible: false, x: 397.12 },
-  { id: "terauchi", name: "寺内", abbr: "寺", visible: false, x: 446.32 },
-  { id: "moka", name: "真岡", abbr: "真", visible: true, x: 593.92 },
-  { id: "kitamoka", name: "北真岡", abbr: "北", visible: false, x: 643.12 },
-  { id: "nishidai", name: "西田井", abbr: "西", visible: false, x: 692.32 },
-  { id: "kitayama", name: "北山", abbr: "山", visible: false, x: 741.52 },
-  { id: "mashiko", name: "益子", abbr: "益", visible: false, x: 790.72 },
-  { id: "nanai", name: "七井", abbr: "七", visible: false, x: 839.92 },
-  { id: "tatara", name: "多田羅", abbr: "多", visible: false, x: 889.12 },
-  { id: "ichihana", name: "市塙", abbr: "市", visible: false, x: 913.72 },
-  { id: "sasaharada", name: "笹原田", abbr: "笹", visible: false, x: 938.32 },
-  { id: "tenyadaba", name: "天矢場", abbr: "天", visible: false, x: 962.92 },
-  { id: "motegi", name: "茂木", abbr: "茂", visible: true, x: 987.52 }
+// 架空路線「桜川電鉄 本線」全10駅マスタ（初期表示は主要4駅: 桜川・美咲町・楓ヶ丘・青山温泉）
+const FICTIONAL_ALL_STATIONS = [
+  { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32 },
+  { id: "shinsakura", name: "新桜川", abbr: "新", visible: false, x: 287.79 },
+  { id: "akanedai", name: "あかね台", abbr: "茜", visible: false, x: 375.25 },
+  { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72 },
+  { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12 },
+  { id: "midorigamori", name: "緑ヶ森", abbr: "緑", visible: false, x: 790.72 },
+  { id: "keikokuguchi", name: "渓谷口", abbr: "渓", visible: false, x: 856.32 },
+  { id: "onsenmae", name: "温泉前", abbr: "温", visible: false, x: 921.92 },
+  { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52 },
+  { id: "tembokoen", name: "展望公園", abbr: "展", visible: false, x: 1050.00 }
 ];
 
 // 標準列車種別マスタ定義
@@ -39,17 +34,6 @@ const DEFAULT_TRAIN_TYPES = [
     prefix: ""
   },
   {
-    id: "deadhead",
-    name: "回送",
-    lineColor: "#E3702E", // 参照PDF実測値 rgb(0.890, 0.439, 0.180)
-    timeColor: "#3023F3", // 参照PDF実測値 rgb(0.188, 0.137, 0.953)
-    textColor: "#3023F3",
-    lineWidth: 1.28,
-    lineStyle: "solid",
-    font: "F3",
-    prefix: "回"
-  },
-  {
     id: "rapid",
     name: "快速",
     lineColor: "#0055AA",
@@ -61,25 +45,200 @@ const DEFAULT_TRAIN_TYPES = [
     prefix: ""
   },
   {
-    id: "sl_special",
-    name: "SL・臨時",
-    lineColor: "#000000",
-    timeColor: "#000000",
-    textColor: "#000000",
+    id: "express",
+    name: "観光急行",
+    lineColor: "#B91C1C",
+    timeColor: "#B91C1C",
+    textColor: "#B91C1C",
+    lineWidth: 1.92,
+    lineStyle: "solid",
+    font: "F1",
+    prefix: ""
+  },
+  {
+    id: "deadhead",
+    name: "回送",
+    lineColor: "#E3702E",
+    timeColor: "#3023F3",
+    textColor: "#3023F3",
     lineWidth: 1.28,
     lineStyle: "solid",
+    font: "F3",
+    prefix: "回"
+  },
+  {
+    id: "trial",
+    name: "試運転",
+    lineColor: "#047857",
+    timeColor: "#047857",
+    textColor: "#047857",
+    lineWidth: 1.28,
+    lineStyle: "dashed",
     font: "F1",
     prefix: ""
   }
 ];
 
-// プリセット1: 真岡鐵道 モオカ14形（全3ページ・全20運用完全版）
-const PRESET_MOKA14 = {
+// プリセット1（デフォルト）: 桜川電鉄 サクラ2000形 全機能体験サンプル（2ページ構成）
+const PRESET_SAKURAGAWA_MAIN = {
   version: "2.0",
   metadata: {
-    title: "真岡鐵道 モオカ14形",
+    title: "桜川電鉄 サクラ2000形 (全機能サンプル)",
     copyright: "(C) 2026 せきたん",
-    updatedAt: "2026-11-12"
+    updatedAt: "2026-11-14"
+  },
+  settings: {
+    pageSize: "A4",
+    orientation: "portrait",
+    pageBreakMode: "auto",
+    baseRowHeight: 12.96,
+    rosterStepRows: 2,
+    partialConnectStepRows: 1,
+    blockPaddingRows: 2,
+    stationHeaderDirection: "vertical",
+    subHeaderMode: "omitFirst",
+    selfHighlightStyle: "red",
+    showLegend: false,
+    symbolScale: 1.0,
+    symbolFill: "preset",
+    autoSyncCoupled: true
+  },
+  stations: [
+    { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32 },
+    { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72 },
+    { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12 },
+    { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52 }
+  ],
+  trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
+  rosters: [
+    {
+      id: "A1",
+      name: "A1",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "101", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "5:40", toStation: "sakuragawa", arrTime: "5:58", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "102", typeId: "local", fromStation: "sakuragawa", depTime: "6:08", toStation: "aoyamaonsen", arrTime: "6:52", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "201", typeId: "rapid", fromStation: "aoyamaonsen", depTime: "7:05", toStation: "sakuragawa", arrTime: "7:42", coupledPartner: "A2", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_201", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "104", typeId: "local", fromStation: "sakuragawa", depTime: "7:55", toStation: "kaedegaoka", arrTime: "8:26", coupledPartner: "A2", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_104", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "104", typeId: "local", fromStation: "kaedegaoka", depTime: "8:30", toStation: "aoyamaonsen", arrTime: "8:55", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 1 },
+        { trainNo: "301", typeId: "express", fromStation: "aoyamaonsen", depTime: "9:15", toStation: "sakuragawa", arrTime: "9:48", coupledPartner: "A2", coupledPosition: "after", coupledFormation: ["A1", "A2", "B1"], customCoupled: "", coupleGroupId: "cg_demo_301", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "199", typeId: "deadhead", fromStation: "sakuragawa", depTime: "10:02", toStation: "kaedegaoka", arrTime: "10:20", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "A2",
+      name: "A2",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "100", typeId: "local", fromStation: "misakicho", depTime: "6:15", toStation: "aoyamaonsen", arrTime: "6:52", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle_filled", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "201", typeId: "rapid", fromStation: "aoyamaonsen", depTime: "7:05", toStation: "sakuragawa", arrTime: "7:42", coupledPartner: "A1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_201", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "104", typeId: "local", fromStation: "sakuragawa", depTime: "7:55", toStation: "kaedegaoka", arrTime: "8:26", coupledPartner: "A1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_104", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "105", typeId: "local", fromStation: "kaedegaoka", depTime: "8:35", toStation: "aoyamaonsen", arrTime: "9:02", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "301", typeId: "express", fromStation: "aoyamaonsen", depTime: "9:15", toStation: "sakuragawa", arrTime: "9:48", coupledPartner: "A1", coupledPosition: "before", coupledFormation: ["A1", "A2", "B1"], customCoupled: "", coupleGroupId: "cg_demo_301", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "110", typeId: "local", fromStation: "sakuragawa", depTime: "10:05", toStation: "misakicho", arrTime: "10:24", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "A3",
+      name: "A3",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "121", typeId: "local", fromStation: "kaedegaoka", depTime: "6:20", toStation: "sakuragawa", arrTime: "6:50", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "122", typeId: "local", fromStation: "sakuragawa", depTime: "7:02", toStation: "kaedegaoka", arrTime: "7:30", coupledPartner: "変A3", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_122", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "122", typeId: "local", fromStation: "kaedegaoka", depTime: "7:34", toStation: "aoyamaonsen", arrTime: "8:01", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 0 },
+        { trainNo: "125", typeId: "local", fromStation: "aoyamaonsen", depTime: "8:20", toStation: "sakuragawa", arrTime: "9:05", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "210", typeId: "rapid", fromStation: "sakuragawa", depTime: "11:00", toStation: "aoyamaonsen", arrTime: "11:36", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "変A3",
+      name: "変A3",
+      customName: false,
+      pageBreakAfter: true,
+      trains: [
+        { trainNo: "122", typeId: "local", fromStation: "sakuragawa", depTime: "7:02", toStation: "kaedegaoka", arrTime: "7:30", coupledPartner: "A3", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_122", depSymbol: "circle_filled", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "134", typeId: "local", fromStation: "kaedegaoka", depTime: "14:15", toStation: "sakuragawa", arrTime: "14:43", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "135", typeId: "local", fromStation: "sakuragawa", depTime: "15:00", toStation: "kaedegaoka", arrTime: "15:28", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "A4",
+      name: "A4",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "140", typeId: "local", fromStation: "sakuragawa", depTime: "16:10", toStation: "aoyamaonsen", arrTime: "16:56", coupledPartner: "A5", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_140", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "215", typeId: "rapid", fromStation: "aoyamaonsen", depTime: "17:12", toStation: "sakuragawa", arrTime: "17:48", coupledPartner: "A5", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_215", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "144", typeId: "local", fromStation: "sakuragawa", depTime: "18:05", toStation: "kaedegaoka", arrTime: "18:35", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "A5",
+      name: "A5",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "140", typeId: "local", fromStation: "sakuragawa", depTime: "16:10", toStation: "aoyamaonsen", arrTime: "16:56", coupledPartner: "A4", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_140", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "215", typeId: "rapid", fromStation: "aoyamaonsen", depTime: "17:12", toStation: "sakuragawa", arrTime: "17:48", coupledPartner: "A4", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_215", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "B1",
+      name: "観光B1",
+      customName: true,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "300", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "8:40", toStation: "aoyamaonsen", arrTime: "9:06", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "301", typeId: "express", fromStation: "aoyamaonsen", depTime: "9:15", toStation: "sakuragawa", arrTime: "9:48", coupledPartner: "A1", coupledPosition: "before", coupledFormation: ["A1", "A2", "B1"], customCoupled: "", coupleGroupId: "cg_demo_301", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "302", typeId: "express", fromStation: "sakuragawa", depTime: "13:00", toStation: "aoyamaonsen", arrTime: "13:34", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    },
+    {
+      id: "C1",
+      name: "C1",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "901", typeId: "trial", fromStation: "kaedegaoka", depTime: "10:15", toStation: "sakuragawa", arrTime: "10:52", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "902", typeId: "trial", fromStation: "sakuragawa", depTime: "11:10", toStation: "aoyamaonsen", arrTime: "11:55", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "903", typeId: "trial", fromStation: "aoyamaonsen", depTime: "12:10", toStation: "kaedegaoka", arrTime: "12:42", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
+    }
+  ],
+  notes: [
+    {
+      id: "note-p1-1",
+      page: 1,
+      text: "※ 土休日は桜川〜楓ヶ丘間2両運転",
+      x: 758.0,
+      y: 266.72,
+      color: "#FF0000",
+      fontSize: 10.72,
+      font: "F1"
+    },
+    {
+      id: "note-p2-1",
+      page: 2,
+      text: "※ 試901〜903は毎週水曜日のみ運転",
+      x: 202.40,
+      y: 448.16,
+      color: "#047857",
+      fontSize: 10.72,
+      font: "F1"
+    }
+  ]
+};
+
+// プリセット2: 桜川電鉄 観光急行「あおば」・EL補機連結ダイヤ（機関車＋客車＋後押し運用）
+const PRESET_SAKURAGAWA_EXPRESS = {
+  version: "2.0",
+  metadata: {
+    title: "桜川電鉄 観光急行・EL補機連結ダイヤ",
+    copyright: "(C) 2026 せきたん",
+    updatedAt: "2026-11-14"
   },
   settings: {
     pageSize: "A4",
@@ -87,1939 +246,121 @@ const PRESET_MOKA14 = {
     pageBreakMode: "manual",
     baseRowHeight: 12.96,
     rosterStepRows: 2,
+    partialConnectStepRows: 1,
     blockPaddingRows: 2,
-    stationHeaderDirection: "vertical", // "vertical" | "horizontal"
+    stationHeaderDirection: "vertical",
     subHeaderMode: "omitFirst",
-    selfHighlightStyle: "red",
+    selfHighlightStyle: "red-bold",
     showLegend: false,
     symbolScale: 1.0,
-    symbolFill: "preset"
+    symbolFill: "preset",
+    autoSyncCoupled: true
   },
   stations: [
-    { id: "shimodate", name: "下館", abbr: "下", visible: true, x: 200.32 },
-    { id: "moka", name: "真岡", abbr: "真", visible: true, x: 593.92 },
-    { id: "motegi", name: "茂木", abbr: "茂", visible: true, x: 987.52 }
+    { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32 },
+    { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 593.92 },
+    { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52 }
   ],
   trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
   rosters: [
     {
-        "id": "A1",
-        "name": "A1",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "104",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "5:23",
-                "toStation": "shimodate",
-                "arrTime": "6:31",
-                "coupledPartner": "A11",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "105",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "6:54",
-                "toStation": "motegi",
-                "arrTime": "8:05",
-                "coupledPartner": "A11",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "112",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "8:15",
-                "toStation": "moka",
-                "arrTime": "8:54",
-                "coupledPartner": "A11",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "112",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "8:59",
-                "toStation": "shimodate",
-                "arrTime": "9:22",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1
-            },
-            {
-                "trainNo": "113",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "9:42",
-                "toStation": "motegi",
-                "arrTime": "10:48",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2120",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "10:53",
-                "toStation": "moka",
-                "arrTime": "11:32",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
+      id: "EL1",
+      name: "EL1",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "8100", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8103", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
     },
     {
-        "id": "A2",
-        "name": "A2",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2102",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:13",
-                "toStation": "shimodate",
-                "arrTime": "5:36",
-                "coupledPartner": "A12",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "103",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "6:01",
-                "toStation": "motegi",
-                "arrTime": "7:17",
-                "coupledPartner": "A12",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "110",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "7:25",
-                "toStation": "shimodate",
-                "arrTime": "8:37",
-                "coupledPartner": "A12",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "111",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "8:52",
-                "toStation": "moka",
-                "arrTime": "9:18",
-                "coupledPartner": "A12",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "111",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "9:23",
-                "toStation": "motegi",
-                "arrTime": "10:01",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1
-            },
-            {
-                "trainNo": "118",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "10:08",
-                "toStation": "shimodate",
-                "arrTime": "11:26",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "119",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "12:04",
-                "toStation": "motegi",
-                "arrTime": "13:10",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "126",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "13:24",
-                "toStation": "shimodate",
-                "arrTime": "14:47",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "127",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "15:04",
-                "toStation": "motegi",
-                "arrTime": "16:14",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "136",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "16:26",
-                "toStation": "shimodate",
-                "arrTime": "17:48",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "137",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "18:21",
-                "toStation": "motegi",
-                "arrTime": "19:31",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2146",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "19:40",
-                "toStation": "moka",
-                "arrTime": "20:25",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
+      id: "PC1",
+      name: "50系",
+      customName: true,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "8100", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8103", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
     },
     {
-        "id": "A3",
-        "name": "A3",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2101",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:44",
-                "toStation": "motegi",
-                "arrTime": "6:25",
-                "coupledPartner": "A13",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "108",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "6:36",
-                "toStation": "shimodate",
-                "arrTime": "7:45",
-                "coupledPartner": "A13",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "109",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "8:07",
-                "toStation": "moka",
-                "arrTime": "8:33",
-                "coupledPartner": "A13",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "109",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "8:37",
-                "toStation": "motegi",
-                "arrTime": "9:20",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1
-            },
-            {
-                "trainNo": "116",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "9:35",
-                "toStation": "shimodate",
-                "arrTime": "10:49",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "117",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "11:10",
-                "toStation": "motegi",
-                "arrTime": "12:23",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "124",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "12:43",
-                "toStation": "shimodate",
-                "arrTime": "13:51",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "125",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "14:33",
-                "toStation": "motegi",
-                "arrTime": "15:44",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "134",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "15:50",
-                "toStation": "shimodate",
-                "arrTime": "16:59",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "135",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "17:18",
-                "toStation": "motegi",
-                "arrTime": "18:35",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "144",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "18:46",
-                "toStation": "shimodate",
-                "arrTime": "20:02",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "143",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "20:46",
-                "toStation": "motegi",
-                "arrTime": "21:52",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2152",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "22:00",
-                "toStation": "moka",
-                "arrTime": "22:38",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "変A3",
-        "name": "変A3",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2101",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:44",
-                "toStation": "motegi",
-                "arrTime": "6:25",
-                "coupledPartner": "A13",
-                "customCoupled": "(A13＋変A3)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "108",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "6:36",
-                "toStation": "moka",
-                "arrTime": "7:15",
-                "coupledPartner": "A13",
-                "customCoupled": "(A13＋変A3)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle_filled",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A4",
-        "name": "A4",
-        "pageBreakAfter": true,
-        "trains": [
-            {
-                "trainNo": "2106",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "6:56",
-                "toStation": "shimodate",
-                "arrTime": "7:21",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "107",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "7:31",
-                "toStation": "motegi",
-                "arrTime": "8:39",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "114",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "8:52",
-                "toStation": "shimodate",
-                "arrTime": "10:09",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "115",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "10:17",
-                "toStation": "motegi",
-                "arrTime": "11:34",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "122",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "11:42",
-                "toStation": "shimodate",
-                "arrTime": "12:50",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "121",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "13:04",
-                "toStation": "motegi",
-                "arrTime": "14:07",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "128",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "14:13",
-                "toStation": "moka",
-                "arrTime": "14:51",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "128",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "14:57",
-                "toStation": "shimodate",
-                "arrTime": "15:21",
-                "coupledPartner": "A14",
-                "customCoupled": "(A4＋A14)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1
-            },
-            {
-                "trainNo": "129",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "15:38",
-                "toStation": "motegi",
-                "arrTime": "16:53",
-                "coupledPartner": "A14",
-                "customCoupled": "(A4＋A14)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2138",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "17:00",
-                "toStation": "moka",
-                "arrTime": "17:38",
-                "coupledPartner": "A14",
-                "customCoupled": "(A4＋A14)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A5",
-        "name": "A5",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2123",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "14:13",
-                "toStation": "motegi",
-                "arrTime": "14:55",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "132",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "15:18",
-                "toStation": "shimodate",
-                "arrTime": "16:36",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "133",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "16:45",
-                "toStation": "motegi",
-                "arrTime": "18:03",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "142",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "18:12",
-                "toStation": "shimodate",
-                "arrTime": "19:17",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "141",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "19:34",
-                "toStation": "motegi",
-                "arrTime": "20:53",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "150",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "21:07",
-                "toStation": "shimodate",
-                "arrTime": "22:18",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2147",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "22:38",
-                "toStation": "moka",
-                "arrTime": "23:01",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A6",
-        "name": "A6",
-        "pageBreakAfter": false,
-        "rowScale": 0.913,
-        "trains": [
-            {
-                "trainNo": "2130",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "15:31",
-                "toStation": "shimodate",
-                "arrTime": "15:55",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "131",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "16:05",
-                "toStation": "motegi",
-                "arrTime": "17:23",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "140",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "17:37",
-                "toStation": "shimodate",
-                "arrTime": "18:51",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "139",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "18:58",
-                "toStation": "motegi",
-                "arrTime": "20:08",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "148",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "20:13",
-                "toStation": "shimodate",
-                "arrTime": "21:16",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.83
-            },
-            {
-                "trainNo": "145",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "21:31",
-                "toStation": "moka",
-                "arrTime": "21:54",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.83
-            },
-            {
-                "trainNo": "145",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "21:59",
-                "toStation": "motegi",
-                "arrTime": "22:40",
-                "coupledPartner": "A31",
-                "customCoupled": "(A6＋A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 0.91
-            }
-        ]
-    },
-    {
-        "id": "A11",
-        "name": "A11",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "104",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "5:23",
-                "toStation": "shimodate",
-                "arrTime": "6:31",
-                "coupledPartner": "A1",
-                "customCoupled": "(A1＋A11)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "105",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "6:54",
-                "toStation": "motegi",
-                "arrTime": "8:05",
-                "coupledPartner": "A1",
-                "customCoupled": "(A1＋A11)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "112",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "8:15",
-                "toStation": "moka",
-                "arrTime": "8:54",
-                "coupledPartner": "A1",
-                "customCoupled": "(A1＋A11)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "変A11",
-        "name": "変A11",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "105",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "7:24",
-                "toStation": "motegi",
-                "arrTime": "8:05",
-                "coupledPartner": "A1",
-                "customCoupled": "(A1＋変A11)",
-                "depSymbol": "circle_filled",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "112",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "8:15",
-                "toStation": "moka",
-                "arrTime": "8:54",
-                "coupledPartner": "A1",
-                "customCoupled": "(A1＋変A11)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A12",
-        "name": "A12",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2102",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:13",
-                "toStation": "shimodate",
-                "arrTime": "5:36",
-                "coupledPartner": "A2",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "103",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "6:01",
-                "toStation": "motegi",
-                "arrTime": "7:17",
-                "coupledPartner": "A2",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "110",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "7:25",
-                "toStation": "shimodate",
-                "arrTime": "8:37",
-                "coupledPartner": "A2",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "111",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "8:52",
-                "toStation": "moka",
-                "arrTime": "9:18",
-                "coupledPartner": "A2",
-                "customCoupled": "(A12＋A2)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A13",
-        "name": "A13",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2101",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:44",
-                "toStation": "motegi",
-                "arrTime": "6:25",
-                "coupledPartner": "A3",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "108",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "6:36",
-                "toStation": "shimodate",
-                "arrTime": "7:45",
-                "coupledPartner": "A3",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "109",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "8:07",
-                "toStation": "moka",
-                "arrTime": "8:33",
-                "coupledPartner": "A3",
-                "customCoupled": "(A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "変A13",
-        "name": "変A13",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2101",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "5:44",
-                "toStation": "motegi",
-                "arrTime": "6:25",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "108",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "6:36",
-                "toStation": "shimodate",
-                "arrTime": "7:45",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "109",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "8:07",
-                "toStation": "motegi",
-                "arrTime": "9:20",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "116",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "9:35",
-                "toStation": "shimodate",
-                "arrTime": "10:49",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "117",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "11:10",
-                "toStation": "motegi",
-                "arrTime": "12:23",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "124",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "12:43",
-                "toStation": "shimodate",
-                "arrTime": "13:51",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "125",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "14:33",
-                "toStation": "moka",
-                "arrTime": "14:57",
-                "coupledPartner": "A3",
-                "customCoupled": "(変A13＋A3)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A21",
-        "name": "A21",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "2123",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "14:13",
-                "toStation": "motegi",
-                "arrTime": "14:55",
-                "coupledPartner": "A5",
-                "customCoupled": "(A5＋A21)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "132",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "15:18",
-                "toStation": "shimodate",
-                "arrTime": "16:36",
-                "coupledPartner": "A5",
-                "customCoupled": "(A5＋A21)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "133",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "16:45",
-                "toStation": "motegi",
-                "arrTime": "18:03",
-                "coupledPartner": "A5",
-                "customCoupled": "(A5＋A21)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "142",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "18:12",
-                "toStation": "moka",
-                "arrTime": "18:50",
-                "coupledPartner": "A5",
-                "customCoupled": "(A5＋A21)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A22",
-        "name": "A22",
-        "pageBreakAfter": true,
-        "trains": [
-            {
-                "trainNo": "128",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "14:57",
-                "toStation": "shimodate",
-                "arrTime": "15:21",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4＋A22)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "129",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "15:38",
-                "toStation": "motegi",
-                "arrTime": "16:53",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4＋A22)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2138",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "17:00",
-                "toStation": "moka",
-                "arrTime": "17:38",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4＋A22)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A23",
-        "name": "A23",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "125",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "15:06",
-                "toStation": "motegi",
-                "arrTime": "15:44",
-                "coupledPartner": "A3",
-                "customCoupled": "(A3＋A23)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "134",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "15:50",
-                "toStation": "shimodate",
-                "arrTime": "16:59",
-                "coupledPartner": "A3",
-                "customCoupled": "(A3＋A23)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "135",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "17:18",
-                "toStation": "motegi",
-                "arrTime": "18:35",
-                "coupledPartner": "A3",
-                "customCoupled": "(A3＋A23)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "144",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "18:46",
-                "toStation": "moka",
-                "arrTime": "19:28",
-                "coupledPartner": "A3",
-                "customCoupled": "(A3＋A23)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A31",
-        "name": "A31",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "145",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "21:59",
-                "toStation": "motegi",
-                "arrTime": "22:40",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋A31)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.91
-            }
-        ]
-    },
-    {
-        "id": "変A31",
-        "name": "変A31",
-        "pageBreakAfter": false,
-        "rowScale": 0.913,
-        "trains": [
-            {
-                "trainNo": "2130",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "15:31",
-                "toStation": "shimodate",
-                "arrTime": "15:55",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "131",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "16:05",
-                "toStation": "motegi",
-                "arrTime": "17:23",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "140",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "17:37",
-                "toStation": "shimodate",
-                "arrTime": "18:51",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "139",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "18:58",
-                "toStation": "motegi",
-                "arrTime": "20:08",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "148",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "20:13",
-                "toStation": "shimodate",
-                "arrTime": "21:16",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.83
-            },
-            {
-                "trainNo": "145",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "21:31",
-                "toStation": "motegi",
-                "arrTime": "22:40",
-                "coupledPartner": "A6",
-                "customCoupled": "(A6＋変A31)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.83
-            }
-        ]
-    },
-    {
-        "id": "A61",
-        "name": "A61",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "117",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "11:42",
-                "toStation": "motegi",
-                "arrTime": "12:23",
-                "coupledPartner": "変A13",
-                "customCoupled": "(変A13＋A61)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "124",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "12:43",
-                "toStation": "shimodate",
-                "arrTime": "13:51",
-                "coupledPartner": "変A13",
-                "customCoupled": "(変A13＋A61)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "125",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "14:33",
-                "toStation": "moka",
-                "arrTime": "14:57",
-                "coupledPartner": "変A13",
-                "customCoupled": "(変A13＋A61)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "125",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "15:06",
-                "toStation": "motegi",
-                "arrTime": "15:50",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1
-            },
-            {
-                "trainNo": "134",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "15:50",
-                "toStation": "shimodate",
-                "arrTime": "16:59",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "135",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "17:18",
-                "toStation": "motegi",
-                "arrTime": "18:35",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "144",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "18:46",
-                "toStation": "shimodate",
-                "arrTime": "20:02",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "143",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "20:46",
-                "toStation": "motegi",
-                "arrTime": "21:52",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "2152",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "22:00",
-                "toStation": "moka",
-                "arrTime": "22:38",
-                "coupledPartner": "",
-                "customCoupled": "",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A62",
-        "name": "A62",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "122",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "12:28",
-                "toStation": "shimodate",
-                "arrTime": "12:51",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4＋A61)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "121",
-                "typeId": "local",
-                "fromStation": "shimodate",
-                "depTime": "13:04",
-                "toStation": "motegi",
-                "arrTime": "14:07",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4+A61)",
-                "depSymbol": "none",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            },
-            {
-                "trainNo": "128",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "14:13",
-                "toStation": "moka",
-                "arrTime": "14:51",
-                "coupledPartner": "A4",
-                "customCoupled": "(A4＋A61)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
-    },
-    {
-        "id": "A63",
-        "name": "A63",
-        "pageBreakAfter": false,
-        "trains": [
-            {
-                "trainNo": "119",
-                "typeId": "local",
-                "fromStation": "moka",
-                "depTime": "12:31",
-                "toStation": "motegi",
-                "arrTime": "13:10",
-                "coupledPartner": "A2",
-                "customCoupled": "(A2＋A63)",
-                "depSymbol": "circle",
-                "arrSymbol": "none",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 1.93
-            },
-            {
-                "trainNo": "126",
-                "typeId": "local",
-                "fromStation": "motegi",
-                "depTime": "13:24",
-                "toStation": "moka",
-                "arrTime": "14:06",
-                "coupledPartner": "A2",
-                "customCoupled": "(A2＋A63)",
-                "depSymbol": "none",
-                "arrSymbol": "triangle",
-                "depTimePos": "auto",
-                "arrTimePos": "auto",
-                "stepRows": 2
-            }
-        ]
+      id: "EL2",
+      name: "EL2",
+      customName: false,
+      pageBreakAfter: false,
+      trains: [
+        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "circle_filled", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+      ]
     }
-],
+  ],
   notes: [
     {
-      id: "note-p2-1",
-      page: 2,
-      text: "SLもおか号運転日は運休",
-      x: 202.40,
-      y: 356.80,
-      color: "#FF0000",
-      fontSize: 10.72,
-      font: "F1"
-    },
-    {
-      id: "note-p2-2",
-      page: 2,
-      text: "SLもおか号運転日は下館～真岡間運休",
-      x: 410.88,
-      y: 369.76,
-      color: "#FF0000",
-      fontSize: 10.72,
-      font: "F1"
-    },
-    {
-      id: "note-p3-1",
-      page: 3,
-      text: "SLもおか号運転日は運休",
-      x: 202.40,
-      y: 340.48,
-      color: "#FF0000",
-      fontSize: 10.72,
-      font: "F1"
-    },
-    {
-      id: "note-p3-2",
-      page: 3,
-      text: "SLもおか号運転日は下館～真岡間運休",
-      x: 410.88,
-      y: 353.44,
-      color: "#FF0000",
+      id: "note-el-1",
+      page: 1,
+      text: "※ EL2は観光急行のみ補機連結",
+      x: 634.0,
+      y: 344.48,
+      color: "#B91C1C",
       fontSize: 10.72,
       font: "F1"
     }
   ]
 };
 
-// プリセット2: 真岡鐵道 DE10 1535 (DL・回送・SL後押し運用)
-const PRESET_DE10 = {
+// プリセット3: 緑川鉄道 シャトル運用（B5横・駅名横書きレイアウトサンプル）
+const PRESET_MIDORIKAWA_COMPACT = {
   version: "2.0",
   metadata: {
-    title: "真岡鐵道 DE10 1535",
+    title: "緑川鉄道 シャトル運用 (B5横サンプル)",
     copyright: "(C) 2026 せきたん",
-    updatedAt: "2026-11-12"
+    updatedAt: "2026-11-14"
   },
   settings: {
-    pageSize: "A4",
-    orientation: "portrait",
+    pageSize: "B5",
+    orientation: "landscape",
     pageBreakMode: "auto",
     baseRowHeight: 12.96,
     rosterStepRows: 2,
+    partialConnectStepRows: 1,
     blockPaddingRows: 2,
-    stationHeaderDirection: "vertical",
-    subHeaderMode: "omitFirst",
-    selfHighlightStyle: "red",
+    stationHeaderDirection: "horizontal",
+    subHeaderMode: "all",
+    selfHighlightStyle: "red-bold",
     showLegend: false,
     symbolScale: 1.0,
-    symbolFill: "preset"
+    symbolFill: "preset",
+    autoSyncCoupled: true
   },
   stations: [
-    { id: "shimodate", name: "下館", abbr: "下", visible: true, x: 200.32 },
-    { id: "moka", name: "真岡", abbr: "真", visible: true, x: 593.92 },
-    { id: "motegi", name: "茂木", abbr: "茂", visible: true, x: 987.52 }
+    { id: "midori_kita", name: "北緑川", abbr: "北", visible: true, x: 200.32 },
+    { id: "midori_chuo", name: "緑川公園", abbr: "公", visible: true, x: 593.92 },
+    { id: "midori_minami", name: "南緑川", abbr: "南", visible: true, x: 987.52 }
   ],
   trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
   rosters: [
     {
-      id: "A301",
-      name: "A301",
+      id: "M1",
+      name: "M1",
+      customName: false,
       pageBreakAfter: false,
       trains: [
-        { trainNo: "6100", typeId: "deadhead", fromStation: "moka", depTime: "9:27", toStation: "shimodate", arrTime: "9:57", coupledPartner: "A601", customCoupled: "回6100(A301＋A601)", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6103", typeId: "local", fromStation: "shimodate", depTime: "16:05", toStation: "moka", arrTime: "16:33", coupledPartner: "A601", customCoupled: "6103(A601+A301)", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "501", typeId: "local", fromStation: "midori_kita", depTime: "6:00", toStation: "midori_minami", arrTime: "6:18", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "502", typeId: "local", fromStation: "midori_minami", depTime: "6:25", toStation: "midori_kita", arrTime: "6:43", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "503", typeId: "rapid", fromStation: "midori_kita", depTime: "7:00", toStation: "midori_minami", arrTime: "7:14", coupledPartner: "M2", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_m_503", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
-      id: "変A301",
-      name: "変A301",
+      id: "M2",
+      name: "M2",
+      customName: false,
       pageBreakAfter: false,
       trains: [
-        { trainNo: "6100", typeId: "deadhead", fromStation: "moka", depTime: "9:27", toStation: "shimodate", arrTime: "9:57", coupledPartner: "A601", customCoupled: "回6100(変A301＋A601)", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "後6001", typeId: "local", fromStation: "shimodate", depTime: "10:35", toStation: "motegi", arrTime: "12:06", coupledPartner: "A601", customCoupled: "後6001(変A301+A601)", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "後6002", typeId: "local", fromStation: "motegi", depTime: "14:28", toStation: "shimodate", arrTime: "15:58", coupledPartner: "A601", customCoupled: "後6002(A601+変A301)", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6103", typeId: "local", fromStation: "shimodate", depTime: "16:05", toStation: "moka", arrTime: "16:33", coupledPartner: "A601", customCoupled: "6103(A601+変A301)", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
-      ]
-    },
-    {
-      id: "平A301",
-      name: "平A301",
-      pageBreakAfter: false,
-      trains: [
-        { trainNo: "6100", typeId: "deadhead", fromStation: "moka", depTime: "9:27", toStation: "shimodate", arrTime: "9:57", coupledPartner: "A601", customCoupled: "回6100(平A301＋A601)", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "後6001", typeId: "local", fromStation: "shimodate", depTime: "10:35", toStation: "moka", arrTime: "11:03", coupledPartner: "A601", customCoupled: "後6001｢SL感動体験列車｣(平A301+A601)", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
-      ]
-    }
-  ],
-  notes: []
-};
-
-// プリセット3: 真岡鐵道 SLもおか・50系客車運用 (sl-pc.pdf 準拠)
-const PRESET_SL_PC = {
-  version: "2.0",
-  metadata: {
-    title: "真岡鐵道 C1266＋50系客車",
-    copyright: "(C) 2026 せきたん",
-    updatedAt: "2026-11-12"
-  },
-  settings: {
-    pageSize: "A4",
-    orientation: "portrait",
-    pageBreakMode: "auto",
-    baseRowHeight: 12.96,
-    rosterStepRows: 2,
-    blockPaddingRows: 2,
-    stationHeaderDirection: "vertical",
-    subHeaderMode: "omitFirst",
-    selfHighlightStyle: "red",
-    showLegend: false,
-    symbolScale: 1.0,
-    symbolFill: "preset"
-  },
-  stations: [
-    { id: "shimodate", name: "下館", abbr: "下", visible: true, x: 200.32 },
-    { id: "moka", name: "真岡", abbr: "真", visible: true, x: 593.92 },
-    { id: "motegi", name: "茂木", abbr: "茂", visible: true, x: 987.52 }
-  ],
-  trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
-  rosters: [
-    {
-      id: "A601",
-      name: "A601",
-      pageBreakAfter: false,
-      trains: [
-        { trainNo: "6100", typeId: "deadhead", fromStation: "moka", depTime: "9:27", toStation: "shimodate", arrTime: "9:57", coupledPartner: "A301", customCoupled: "回6100(A301＋A601)", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6001", typeId: "sl_special", fromStation: "shimodate", depTime: "10:35", toStation: "motegi", arrTime: "12:06", coupledPartner: "", customCoupled: "6001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6002", typeId: "sl_special", fromStation: "motegi", depTime: "14:28", toStation: "shimodate", arrTime: "15:58", coupledPartner: "", customCoupled: "6002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6103", typeId: "local", fromStation: "shimodate", depTime: "16:05", toStation: "moka", arrTime: "16:33", coupledPartner: "A301", customCoupled: "6103(A601+A301)", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
-      ]
-    },
-    {
-      id: "平A601",
-      name: "平A601",
-      pageBreakAfter: false,
-      trains: [
-        { trainNo: "6100", typeId: "deadhead", fromStation: "moka", depTime: "9:27", toStation: "shimodate", arrTime: "9:57", coupledPartner: "平A301", customCoupled: "回6100(A301＋A601)", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6001", typeId: "sl_special", fromStation: "shimodate", depTime: "10:35", toStation: "moka", arrTime: "11:03", coupledPartner: "平A301", customCoupled: "6001｢SL感動体験列車｣(A301+A601)", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "6001", typeId: "sl_special", fromStation: "moka", depTime: "11:13", toStation: "motegi", arrTime: "12:06", coupledPartner: "", customCoupled: "6001｢SL感動体験列車｣", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 1 },
-        { trainNo: "6002", typeId: "sl_special", fromStation: "motegi", depTime: "14:28", toStation: "moka", arrTime: "15:21", coupledPartner: "", customCoupled: "6002", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "503", typeId: "rapid", fromStation: "midori_kita", depTime: "7:00", toStation: "midori_minami", arrTime: "7:14", coupledPartner: "M1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_m_503", depSymbol: "circle_filled", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     }
   ],

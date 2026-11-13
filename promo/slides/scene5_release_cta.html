@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Scene 5 - 公開日時告知</title>
+<link rel="stylesheet" href="./slide_base.css" />
+<style>
+  body {
+    background: linear-gradient(135deg, #091c47 0%, #0f3a8a 48%, #700018 100%);
+  }
+
+  .cta-container {
+    position: relative;
+    z-index: 20;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 34px;
+    padding: 58px 80px;
+  }
+
+  .header-ribbon {
+    background: linear-gradient(90deg, #e60012, #ff7b00, #e60012);
+    border: 6px solid #ffffff;
+    border-radius: 999px;
+    padding: 12px 54px;
+    font-size: 46px;
+    font-weight: 900;
+    color: #ffe600;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 8px #000;
+    box-shadow: 0 0 0 5px #000, 0 12px 24px rgba(0,0,0,0.6);
+  }
+
+  .release-card {
+    width: 1680px;
+    background: linear-gradient(180deg, #fffdf0 0%, #fff3b8 100%);
+    border: 12px solid #ffe600;
+    border-radius: 36px;
+    padding: 46px 64px;
+    box-shadow: 0 0 0 10px #000000, 0 24px 0 #000000, 0 38px 65px rgba(0, 0, 0, 0.72);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .date-line {
+    font-family: var(--font-gothic);
+    font-size: 86px;
+    font-weight: 900;
+    color: #c80010;
+    paint-order: stroke fill;
+    -webkit-text-stroke: 14px #ffffff;
+    filter: drop-shadow(0 6px 0 #000000);
+    letter-spacing: 0.02em;
+  }
+  .date-highlight {
+    background: #e60012;
+    color: #ffe600;
+    border: 5px solid #000000;
+    border-radius: 20px;
+    padding: 4px 26px;
+    -webkit-text-stroke: 0px;
+    display: inline-block;
+    margin-right: 12px;
+    box-shadow: 0 6px 0 #000000;
+  }
+
+  .platform-line {
+    font-size: 68px;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: 0.03em;
+  }
+
+  .account-bar {
+    width: 100%;
+    max-width: 1740px;
+    background: linear-gradient(180deg, #111827 0%, #020617 100%);
+    border: 7px solid #38bdf8;
+    border-radius: 26px;
+    padding: 24px 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    white-space: nowrap;
+    box-shadow: 0 0 0 5px #000000, 0 14px 32px rgba(0,0,0,0.65);
+  }
+  .account-text {
+    font-size: 42px;
+    font-weight: 900;
+    color: #ffffff;
+    white-space: nowrap;
+  }
+  .account-id {
+    background: #38bdf8;
+    color: #020617;
+    border-radius: 14px;
+    padding: 4px 20px;
+    font-family: var(--font-ui);
+    font-size: 44px;
+    font-weight: 900;
+    white-space: nowrap;
+  }
+
+  .footer-note {
+    font-size: 32px;
+    font-weight: 800;
+    color: #ffe600;
+    text-shadow: 3px 3px 0 #000;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="radial-rays-soft" id="rays" style="opacity:0.18;"></div>
+  <div class="retro-vignette"></div>
+
+  <div class="cta-container">
+    <div class="header-ribbon" id="ribbon">
+      🎉 鉄道ファンの皆さまへ β版 無料公開！
+    </div>
+
+    <div class="release-card" id="card">
+      <div class="date-line">
+        <span class="date-highlight">2026年11月14日 18:00</span>公開！
+      </div>
+      <div class="platform-line">
+        GitHub Pages にてブラウザですぐ使えます！
+      </div>
+    </div>
+
+    <div class="account-bar" id="accountBar">
+      <span class="account-text">せきたん</span>
+      <span class="account-id">@sekitan66325</span>
+      <span class="account-text">のアカウントをフォローしてお待ちください！</span>
+    </div>
+
+    <div class="footer-note">
+      ※ ご意見・ご要望フォームはアプリ内の「✉ お問い合わせ」からいつでも送信できます！
+    </div>
+  </div>
+</div>
+
+<script>
+  window.seekTo = function(t) {
+    document.getElementById("rays").style.transform = `rotate(${t * 12}deg)`;
+    const s = Math.min(1, t / 0.28);
+    document.getElementById("card").style.transform = `scale(${0.92 + 0.08 * s})`;
+    document.getElementById("card").style.opacity = String(s);
+    const s2 = Math.min(1, Math.max(0, (t - 0.35) / 0.25));
+    document.getElementById("accountBar").style.transform = `translateY(${(1 - s2) * 24}px)`;
+    document.getElementById("accountBar").style.opacity = String(s2);
+  };
+  if (new URLSearchParams(location.search).get("manual") !== "1") {
+    window.seekTo(2.0);
+  }
+</script>
+</body>
+</html>
+

@@ -8,3 +8,9 @@ test_final.png
 Thumbs.db
 desktop.ini
 *.log
+
+
+promo/build/
+promo/out/
+__pycache__/
+*.pyc
