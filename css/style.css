@@ -521,6 +521,210 @@ html, body {
   align-items: center;
 }
 
+/* 併結位置選択・3両以上ポップオーバー・部分継走・同期コントロール */
+.coupled-cell-flex {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.coupled-pos-select {
+  width: 50px !important;
+  flex: 0 0 50px;
+  font-size: 10px !important;
+  padding: 0 1px !important;
+}
+
+.coupled-multi-badge {
+  flex: 1;
+  min-width: 48px;
+  height: 22px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #1d4ed8;
+  background-color: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+
+.coupled-multi-badge:hover {
+  background-color: #dbeafe;
+}
+
+#trainsGridTable .action-cell .btn-icon {
+  padding: 1px 2px;
+  font-size: 11px;
+}
+
+.sync-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sync-toggle-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: #f8fafc;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 2px 7px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sync-toggle-label input {
+  margin: 0;
+  cursor: pointer;
+}
+
+.sync-status-badge {
+  font-size: 11px;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-weight: 600;
+}
+
+.roster-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.roster-name-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-weight: 600;
+}
+
+.roster-name-badge.is-auto {
+  background-color: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.roster-name-badge.is-manual {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+}
+
+.editor-inline-alert {
+  margin-top: 6px;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.editor-floating-popover {
+  position: fixed;
+  z-index: 3000;
+  min-width: 240px;
+  max-width: 310px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.18);
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.editor-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.formation-preview-chip {
+  background: #f8fafc;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.formation-slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.formation-slot-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.formation-slot-item.is-self {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  font-weight: 700;
+}
+
+.formation-slot-label {
+  flex: 1;
+  font-size: 12px;
+}
+
+.formation-add-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.editor-popover-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.split-station-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
 /* ==========================================================================
    設定フォーム・グループ
    ========================================================================== */

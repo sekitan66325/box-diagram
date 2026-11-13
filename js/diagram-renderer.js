@@ -499,8 +499,18 @@ class BoxDiagramRenderer {
     const rawNo = train.trainNo || "";
     let coupledText = train.customCoupled || "";
 
-    if (!coupledText && train.coupledPartner) {
-      coupledText = `(${selfRosterId}＋${train.coupledPartner})`;
+    if (!coupledText) {
+      if (Array.isArray(train.coupledFormation) && train.coupledFormation.length >= 2) {
+        const parts = train.coupledFormation.filter(Boolean);
+        if (selfRosterId && !parts.includes(selfRosterId)) {
+          parts.unshift(selfRosterId);
+        }
+        coupledText = `(${parts.join("＋")})`;
+      } else if (train.coupledPartner) {
+        coupledText = train.coupledPosition === "before"
+          ? `(${train.coupledPartner}＋${selfRosterId})`
+          : `(${selfRosterId}＋${train.coupledPartner})`;
+      }
     }
 
     if (!coupledText) {
@@ -512,7 +522,18 @@ class BoxDiagramRenderer {
       fullText = `${rawNo}${coupledText}`;
     }
 
-    const selfIdx = fullText.indexOf(selfRosterId);
+    // 自運用IDの部分一致誤爆（例: 変A11 内の A1）を防ぐため境界トークンを優先一致させる
+    let selfIdx = -1;
+    if (selfRosterId) {
+      const escapedSelf = selfRosterId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const tokenRegex = new RegExp(`(^|[\\(（＋+\\s])${escapedSelf}(?=[\\)）＋+\\s]|$)`);
+      const m = tokenRegex.exec(fullText);
+      if (m) {
+        selfIdx = m.index + m[1].length;
+      } else {
+        selfIdx = fullText.indexOf(selfRosterId);
+      }
+    }
     if (selfIdx !== -1) {
       const before = fullText.substring(0, selfIdx);
       const matched = fullText.substring(selfIdx, selfIdx + selfRosterId.length);

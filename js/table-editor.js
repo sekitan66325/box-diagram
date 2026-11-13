@@ -18,9 +18,18 @@ class BoxDiagramTableEditor {
     this.activeTab = "tab-trains"; // デフォルトは最も頻繁に触る「列車表」
     this.activeRosterId = null;
     this.isInternalInput = false;
+    this.floatingPopover = null;
+    this._docPopoverCloseHandler = null;
+    this.lastSyncMessage = "";
 
     // リスナー登録
     this.model.subscribe((data, actionType, meta) => {
+      if (actionType === "rosters-update" && meta && meta.oldId && meta.newId && meta.oldId !== meta.newId) {
+        if (this.activeRosterId === meta.oldId) {
+          this.activeRosterId = meta.newId;
+        }
+      }
+
       // 自身がトリガーした値更新中は再描画しない（フォーカス・ポップアップ維持）
       if (this.isInternalInput) {
         return;
@@ -31,8 +40,8 @@ class BoxDiagramTableEditor {
         "load", "history",
         "stations-add", "stations-del", "stations-move", "stations-reset",
         "trainTypes-add", "trainTypes-del",
-        "rosters-add", "rosters-del", "rosters-move", "rosters-dup",
-        "trains-add", "trains-del", "trains-move", "trains-dup",
+        "rosters-add", "rosters-del", "rosters-move", "rosters-dup", "rosters-update",
+        "trains-add", "trains-del", "trains-move", "trains-dup", "trains-sync",
         "notes-add", "notes-del"
       ];
 
@@ -63,6 +72,209 @@ class BoxDiagramTableEditor {
     if (this.model.getData()) {
       this.render();
     }
+  }
+
+  closeFloatingPopover() {
+    if (this.floatingPopover && this.floatingPopover.parentNode) {
+      this.floatingPopover.parentNode.removeChild(this.floatingPopover);
+    }
+    this.floatingPopover = null;
+    if (this._docPopoverCloseHandler) {
+      document.removeEventListener("mousedown", this._docPopoverCloseHandler);
+      this._docPopoverCloseHandler = null;
+    }
+  }
+
+  positionFloatingPopover(pop, anchorEl) {
+    const rect = anchorEl.getBoundingClientRect();
+    document.body.appendChild(pop);
+    const popRect = pop.getBoundingClientRect();
+    const top = (rect.bottom + 4 + popRect.height <= window.innerHeight)
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - popRect.height - 4);
+    const left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - popRect.width - 12));
+    pop.style.top = `${Math.round(top)}px`;
+    pop.style.left = `${Math.round(left)}px`;
+
+    setTimeout(() => {
+      this._docPopoverCloseHandler = (ev) => {
+        if (this.floatingPopover && !this.floatingPopover.contains(ev.target) && !anchorEl.contains(ev.target)) {
+          this.closeFloatingPopover();
+        }
+      };
+      document.addEventListener("mousedown", this._docPopoverCloseHandler);
+    }, 0);
+  }
+
+  openFormationPopover(anchorEl, trainIndex) {
+    this.closeFloatingPopover();
+    const roster = this.model.getRoster(this.activeRosterId);
+    if (!roster || !roster.trains[trainIndex]) return;
+    const train = roster.trains[trainIndex];
+    const allRosters = this.model.getRosters();
+
+    let draftFormation = this.model.getFormationOrder(roster.id, train).slice();
+    if (draftFormation.length === 0) draftFormation = [roster.id];
+
+    const pop = document.createElement("div");
+    pop.id = "editorFloatingPopover";
+    pop.className = "editor-floating-popover";
+    this.floatingPopover = pop;
+
+    const renderPopoverBody = () => {
+      const availableToAdd = allRosters.filter(r => !draftFormation.includes(r.id));
+      const previewStr = draftFormation.length >= 2
+        ? `${train.trainNo || ""}(${draftFormation.join("＋")})`
+        : `${train.trainNo || ""}（単行 / 併結なし）`;
+
+      pop.innerHTML = `
+        <div class="editor-popover-header">
+          <span>編成・連結順序の設定</span>
+          <button type="button" class="btn-icon-xs" data-pop-act="close">✕</button>
+        </div>
+        <div class="formation-preview-chip">${this.escapeXml(previewStr)}</div>
+        <div class="formation-slot-list">
+          ${draftFormation.map((id, i) => `
+            <div class="formation-slot-item ${id === roster.id ? 'is-self' : ''}">
+              <span class="font-mono" style="color:var(--text-muted);width:16px;">${i + 1}.</span>
+              <span class="formation-slot-label">${this.escapeXml(id)}${id === roster.id ? ' (自運用)' : ''}</span>
+              <button type="button" class="btn-icon-xs" data-pop-act="move-up" data-idx="${i}" ${i === 0 ? 'disabled' : ''} title="前へ">↑</button>
+              <button type="button" class="btn-icon-xs" data-pop-act="move-down" data-idx="${i}" ${i === draftFormation.length - 1 ? 'disabled' : ''} title="後へ">↓</button>
+              ${id !== roster.id ? `<button type="button" class="btn-icon-xs text-danger" data-pop-act="remove" data-idx="${i}" title="この運用を外す">✕</button>` : ''}
+            </div>
+          `).join("")}
+        </div>
+        <div class="formation-add-row">
+          <select class="cell-select" id="popAddPartnerSelect" style="flex:1;">
+            <option value="">＋ 連結する運用を追加...</option>
+            ${availableToAdd.map(r => `<option value="${this.escapeXml(r.id)}">${this.escapeXml(r.id)}${r.name && r.name !== r.id ? ` (${this.escapeXml(r.name)})` : ''}</option>`).join("")}
+          </select>
+          <button type="button" class="btn btn-xs btn-secondary" data-pop-act="add-partner">追加</button>
+        </div>
+        <div class="editor-popover-footer">
+          <button type="button" class="btn btn-xs btn-secondary text-danger" data-pop-act="clear-all">単行に戻す</button>
+          <button type="button" class="btn btn-xs btn-primary" data-pop-act="apply">適用</button>
+        </div>
+      `;
+    };
+
+    pop.addEventListener("click", (e) => {
+      const btn = e.target.closest("button");
+      if (!btn) return;
+      const act = btn.dataset.popAct;
+      const idx = parseInt(btn.dataset.idx, 10);
+
+      if (act === "close") {
+        this.closeFloatingPopover();
+      } else if (act === "move-up" && idx > 0) {
+        const tmp = draftFormation[idx - 1];
+        draftFormation[idx - 1] = draftFormation[idx];
+        draftFormation[idx] = tmp;
+        renderPopoverBody();
+      } else if (act === "move-down" && idx < draftFormation.length - 1) {
+        const tmp = draftFormation[idx + 1];
+        draftFormation[idx + 1] = draftFormation[idx];
+        draftFormation[idx] = tmp;
+        renderPopoverBody();
+      } else if (act === "remove" && !Number.isNaN(idx)) {
+        draftFormation.splice(idx, 1);
+        renderPopoverBody();
+      } else if (act === "add-partner") {
+        const sel = pop.querySelector("#popAddPartnerSelect");
+        if (sel && sel.value && !draftFormation.includes(sel.value)) {
+          draftFormation.push(sel.value);
+          renderPopoverBody();
+        }
+      } else if (act === "clear-all") {
+        this.model.updateTrain(this.activeRosterId, trainIndex, {
+          coupledFormation: [],
+          coupledPartner: "",
+          coupledPosition: "after",
+          customCoupled: ""
+        });
+        this.closeFloatingPopover();
+        this.render();
+      } else if (act === "apply") {
+        const sel = pop.querySelector("#popAddPartnerSelect");
+        if (sel && sel.value && !draftFormation.includes(sel.value)) {
+          draftFormation.push(sel.value);
+        }
+        this.model.updateTrain(this.activeRosterId, trainIndex, {
+          coupledFormation: draftFormation.length >= 2 ? draftFormation : [],
+          customCoupled: ""
+        });
+        this.closeFloatingPopover();
+        this.render();
+      }
+    });
+
+    renderPopoverBody();
+    this.positionFloatingPopover(pop, anchorEl);
+  }
+
+  openSplitPopover(anchorEl, trainIndex) {
+    this.closeFloatingPopover();
+    const roster = this.model.getRoster(this.activeRosterId);
+    if (!roster || !roster.trains[trainIndex]) return;
+    const train = roster.trains[trainIndex];
+
+    const vis = this.model.getVisibleStations().slice().sort((a, b) => a.x - b.x);
+    const fromIdx = vis.findIndex(s => s.id === train.fromStation);
+    const toIdx = vis.findIndex(s => s.id === train.toStation);
+
+    let candidates = [];
+    if (fromIdx !== -1 && toIdx !== -1 && Math.abs(toIdx - fromIdx) > 1) {
+      const lo = Math.min(fromIdx, toIdx);
+      const hi = Math.max(fromIdx, toIdx);
+      candidates = vis.slice(lo + 1, hi);
+      if (fromIdx > toIdx) candidates.reverse();
+    } else {
+      candidates = vis.filter(s => s.id !== train.fromStation && s.id !== train.toStation);
+    }
+
+    const pop = document.createElement("div");
+    pop.id = "editorFloatingPopover";
+    pop.className = "editor-floating-popover";
+    this.floatingPopover = pop;
+
+    pop.innerHTML = `
+      <div class="editor-popover-header">
+        <span>✂ 途中駅で継走分割</span>
+        <button type="button" class="btn-icon-xs" data-split-close="1">✕</button>
+      </div>
+      ${candidates.length === 0 ? `
+        <div style="font-size:11px;color:var(--text-muted);line-height:1.5;">
+          分割できる中間駅がありません。<br />（「駅マスタ」で途中駅を表示チェックしてください）
+        </div>
+      ` : `
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px;">
+          分割する駅を選択すると、前後の2区間（継走列車）に分割します：
+        </div>
+        <div class="split-station-list">
+          ${candidates.map(s => `
+            <button type="button" class="btn btn-xs btn-secondary" style="justify-content:flex-start;" data-split-station="${this.escapeXml(s.id)}">
+              ${this.escapeXml(s.name)} (${this.escapeXml(s.abbr || '')}) で分割
+            </button>
+          `).join("")}
+        </div>
+      `}
+    `;
+
+    pop.addEventListener("click", (e) => {
+      const closeBtn = e.target.closest("[data-split-close]");
+      if (closeBtn) {
+        this.closeFloatingPopover();
+        return;
+      }
+      const stBtn = e.target.closest("[data-split-station]");
+      if (stBtn) {
+        const viaId = stBtn.dataset.splitStation;
+        this.closeFloatingPopover();
+        this.model.splitTrainAtStation(this.activeRosterId, trainIndex, viaId);
+      }
+    });
+
+    this.positionFloatingPopover(pop, anchorEl);
   }
 
   safeMutate(fn) {
@@ -107,15 +319,18 @@ class BoxDiagramTableEditor {
 
   setActiveTab(tabId) {
     this.activeTab = tabId;
+    this.lastSyncMessage = "";
     this.render();
   }
 
   setActiveRoster(rosterId) {
     this.activeRosterId = rosterId;
+    this.lastSyncMessage = "";
     this.render();
   }
 
   render() {
+    this.closeFloatingPopover();
     const data = this.model.getData();
     if (!data) return;
 
@@ -205,9 +420,12 @@ class BoxDiagramTableEditor {
         ${this.escapeXml(r.name || r.id)} (${r.trains ? r.trains.length : 0}本)
       </option>
     `).join("");
+    const set = data.settings || {};
+    const autoSync = set.autoSyncCoupled !== false;
+    const partialStep = typeof set.partialConnectStepRows === "number" ? set.partialConnectStepRows : 1;
 
     return `
-      <div class="tab-toolbar">
+      <div class="tab-toolbar" style="flex-wrap: wrap; gap: 6px;">
         <div class="roster-selector-group">
           <label class="control-label">運用:</label>
           <select id="selectActiveRoster" class="form-select font-bold">
@@ -215,11 +433,22 @@ class BoxDiagramTableEditor {
           </select>
         </div>
 
-        <div class="action-buttons">
+        <div class="action-buttons" style="flex-wrap: wrap; gap: 5px;">
           <button id="btnAddTrain" class="btn btn-sm btn-primary">＋ 列車追加</button>
-          <button id="btnAddConnectingTrain" class="btn btn-sm btn-secondary" title="前列車の到着駅・時刻から自動接続する列車を追加">
+          <button id="btnAddConnectingTrain" class="btn btn-sm btn-secondary" title="前列車から接続追加（途中駅なら列車番号・種別引継＋標準${partialStep}行、終端駅なら折り返し）">
             ＋ 継走列車追加
           </button>
+        </div>
+
+        <div class="sync-toolbar-group">
+          <label class="sync-toggle-label" title="ONのとき、併結列車の列車番号・種別・発着駅・時刻・連結順序を変更すると相手運用にも即時反映します">
+            <input type="checkbox" id="checkAutoSyncCoupled" ${autoSync ? 'checked' : ''} />
+            <span>⚡ 併結自動同期</span>
+          </label>
+          <button id="btnSyncCoupledAll" class="btn btn-sm btn-secondary" title="この運用の併結列車の着発情報・位置順序を相手運用へ一括反映（相手側の不足行も生成）">
+            🔗 相手へ一括同期
+          </button>
+          ${this.lastSyncMessage ? `<span id="syncStatusBadge" class="sync-status-badge">${this.escapeXml(this.lastSyncMessage)}</span>` : ''}
         </div>
       </div>
 
@@ -227,18 +456,18 @@ class BoxDiagramTableEditor {
         <table class="grid-table" id="trainsGridTable">
           <thead>
             <tr>
-              <th style="width: 26px;">#</th>
-              <th style="width: 66px;">列車番号</th>
-              <th style="width: 68px;">種別</th>
-              <th style="width: 58px;">発駅</th>
-              <th style="width: 50px;">発時刻</th>
-              <th style="width: 58px;">着駅</th>
-              <th style="width: 50px;">着時刻</th>
-              <th style="width: 116px;">併結</th>
-              <th style="width: 54px;">発記</th>
-              <th style="width: 54px;">着記</th>
-              <th style="width: 36px;" title="行数 (標準2行)">行</th>
-              <th style="width: 68px;">操作</th>
+              <th style="width: 22px;">#</th>
+              <th style="width: 52px;">列番</th>
+              <th style="width: 54px;">種別</th>
+              <th style="width: 48px;">発駅</th>
+              <th style="width: 42px;">発時刻</th>
+              <th style="width: 48px;">着駅</th>
+              <th style="width: 42px;">着時刻</th>
+              <th style="width: 128px;">併結 (相手/位置)</th>
+              <th style="width: 44px;">発記</th>
+              <th style="width: 44px;">着記</th>
+              <th style="width: 30px;" title="段下げ行数 (0行〜、標準2行)">行</th>
+              <th style="width: 78px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -249,7 +478,7 @@ class BoxDiagramTableEditor {
 
       <div class="table-footer-info">
         <span>全 ${trains.length} 本</span>
-        <span class="text-muted" style="margin-left: 15px;">※ 列車番号や時刻はセル内直接編集が可能です。</span>
+        <span class="text-muted" style="margin-left: 12px;">※ 「⚙」で3両以上の連結順序設定、「✂」で途中駅での継走分割ができます。</span>
       </div>
     `;
   }
@@ -293,18 +522,31 @@ class BoxDiagramTableEditor {
 
     // 併結列: 相手選択＋順序反転⇄＋自由記述✎
     const isCustom = !!train.customCoupled;
+    const formation = this.model.getFormationOrder(roster.id, train);
+    const isMultiCar = Array.isArray(train.coupledFormation) && train.coupledFormation.length >= 3;
+    const coupledPos = train.coupledPosition === "before" ? "before" : "after";
     const partnerSelectHtml = `
       <div class="coupled-cell-flex">
         ${isCustom ? `
-          <input type="text" class="cell-input cell-input-sm" data-field="customCoupled" value="${this.escapeXml(train.customCoupled)}" placeholder="自由記述" style="flex: 1; min-width: 55px;" />
-          <button class="btn-icon-xs" data-action="toggle-custom-coupled" title="自動併結に戻す">✕</button>
+          <input type="text" class="cell-input cell-input-sm" data-field="customCoupled" value="${this.escapeXml(train.customCoupled)}" placeholder="自由記述" style="flex: 1; min-width: 45px;" />
+          <button class="btn-icon-xs" data-action="toggle-custom-coupled" title="自動併結（選択式）に戻す">✕</button>
+        ` : (isMultiCar ? `
+          <button type="button" class="coupled-multi-badge" data-action="open-formation-popover" title="編成順序・連結位置を変更: (${this.escapeXml(formation.join('＋'))})">
+            ${this.escapeXml(formation.join("＋"))}
+          </button>
+          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">⚙</button>
+          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">✎</button>
         ` : `
-          <select class="cell-select cell-select-sm" data-field="coupledPartner" style="flex: 1; min-width: 55px;">
+          <select class="cell-select cell-select-sm" data-field="coupledPartner" style="flex: 1; min-width: 36px;">
             ${partnerOptions}
           </select>
-          <button class="btn-icon-xs" data-action="swap-coupled-order" title="併結順序を反転 (例: A1＋A11 ⇄ A11＋A1)" ${!train.coupledPartner ? 'disabled' : ''}>⇄</button>
-          <button class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">✎</button>
-        `}
+          <select class="cell-select cell-select-sm coupled-pos-select" data-field="coupledPosition" title="自運用の連結位置" ${!train.coupledPartner ? 'disabled' : ''}>
+            <option value="after" ${coupledPos === 'after' ? 'selected' : ''}>後(自+相)</option>
+            <option value="before" ${coupledPos === 'before' ? 'selected' : ''}>前(相+自)</option>
+          </select>
+          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">⚙</button>
+          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">✎</button>
+        `)}
       </div>
     `;
 
@@ -353,9 +595,10 @@ class BoxDiagramTableEditor {
           </select>
         </td>
         <td>
-          <input type="number" class="cell-input text-center font-mono" data-field="stepRows" value="${train.stepRows || 2}" min="1" max="10" />
+          <input type="number" class="cell-input text-center font-mono" data-field="stepRows" value="${typeof train.stepRows === 'number' ? train.stepRows : 2}" min="0" max="10" />
         </td>
         <td class="action-cell">
+          <button class="btn-icon" data-action="split-train" title="途中駅で継走分割（部分継走）">✂</button>
           <button class="btn-icon" data-action="dup-train" title="複製">📄</button>
           <button class="btn-icon text-danger" data-action="del-train" title="削除">✕</button>
           <button class="btn-icon" data-action="up-train" title="上へ移動" ${index === 0 ? 'disabled' : ''}>↑</button>
@@ -379,12 +622,12 @@ class BoxDiagramTableEditor {
         <table class="grid-table" id="rostersGridTable">
           <thead>
             <tr>
-              <th style="width: 36px;">#</th>
-              <th style="width: 130px;">運用ID</th>
-              <th style="width: 150px;">表示名</th>
-              <th style="width: 80px;">本数</th>
-              <th style="width: 90px;" title="手動改ページモード時にこの運用の直後でページを区切る">改ページ</th>
-              <th style="width: 160px;">操作</th>
+              <th style="width: 34px;">#</th>
+              <th style="width: 115px;">運用番号 (ID)</th>
+              <th style="width: 195px;">表示用運用番号</th>
+              <th style="width: 60px;">本数</th>
+              <th style="width: 78px;" title="手動改ページモード時にこの運用の直後でページを区切る">改ページ</th>
+              <th style="width: 148px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -395,7 +638,11 @@ class BoxDiagramTableEditor {
                   <input type="text" class="cell-input font-bold" data-roster-field="id" value="${this.escapeXml(r.id)}" />
                 </td>
                 <td>
-                  <input type="text" class="cell-input" data-roster-field="name" value="${this.escapeXml(r.name || r.id)}" />
+                  <div class="roster-name-cell">
+                    <input type="text" class="cell-input" data-roster-field="name" value="${this.escapeXml(r.name || r.id)}" placeholder="${this.escapeXml(r.id)}" style="flex:1;min-width:60px;" />
+                    <span class="roster-name-badge ${r.customName ? 'is-manual' : 'is-auto'}">${r.customName ? '手動' : '自動'}</span>
+                    ${r.customName ? `<button type="button" class="btn-icon-xs" data-action="reset-roster-name" title="運用番号と同じ自動同期へ戻す">↺</button>` : ''}
+                  </div>
                 </td>
                 <td class="text-center font-mono">
                   ${r.trains ? r.trains.length : 0} 本
@@ -417,6 +664,10 @@ class BoxDiagramTableEditor {
             `).join("")}
           </tbody>
         </table>
+      </div>
+      <div id="rosterEditErrorBox" class="editor-inline-alert" style="display:none;"></div>
+      <div class="table-footer-info">
+        <span>※ 「運用番号」を変更すると、「自動」の表示用運用番号や他運用の併結相手参照も自動追従します。「表示用運用番号」を直接編集すると「手動」上書きになります（↺で自動同期に戻せます）。</span>
       </div>
     `;
   }
@@ -695,6 +946,13 @@ class BoxDiagramTableEditor {
               <option value="red-bold" ${set.selfHighlightStyle === 'red-bold' ? 'selected' : ''}>赤文字＋太字</option>
             </select>
           </div>
+          <div class="form-row">
+            <label class="form-label">途中駅 部分継走の標準段下げ:</label>
+            <select class="form-select" id="selectPartialConnectStepRows">
+              <option value="1" ${(typeof set.partialConnectStepRows !== 'number' || set.partialConnectStepRows >= 1) ? 'selected' : ''}>1行（標準：他資料準拠の段差）</option>
+              <option value="0" ${set.partialConnectStepRows === 0 ? 'selected' : ''}>0行（同じ横線上に詰める）</option>
+            </select>
+          </div>
           <div class="form-row-grid" style="margin-top: 10px;">
             <div class="form-col">
               <label class="form-label">基準Excel行高 (px):</label>
@@ -776,7 +1034,28 @@ class BoxDiagramTableEditor {
       const btnAddConn = this.container.querySelector("#btnAddConnectingTrain");
       if (btnAddConn) {
         btnAddConn.addEventListener("click", () => {
-          this.model.addTrain(this.activeRosterId);
+          this.model.addConnectingTrain(this.activeRosterId);
+        });
+      }
+
+      const checkAutoSync = this.container.querySelector("#checkAutoSyncCoupled");
+      if (checkAutoSync) {
+        checkAutoSync.addEventListener("change", (e) => {
+          this.safeMutate(() => {
+            this.model.updateSettings({ autoSyncCoupled: e.target.checked });
+          });
+        });
+      }
+
+      const btnSyncAll = this.container.querySelector("#btnSyncCoupledAll");
+      if (btnSyncAll) {
+        btnSyncAll.addEventListener("click", () => {
+          let res = { updatedCount: 0, createdCount: 0 };
+          this.safeMutate(() => {
+            res = this.model.syncRosterCoupledTrains(this.activeRosterId);
+          });
+          this.lastSyncMessage = `同期完了 (更新 ${res.updatedCount}件 / 新規 ${res.createdCount}件)`;
+          this.render();
         });
       }
 
@@ -798,7 +1077,10 @@ class BoxDiagramTableEditor {
           const field = e.target.dataset.field;
           if (field) {
             let val = e.target.value;
-            if (field === "stepRows") val = parseInt(val, 10) || 2;
+            if (field === "stepRows") {
+              const parsed = parseInt(val, 10);
+              val = Number.isNaN(parsed) ? 2 : Math.max(0, parsed);
+            }
             this.safeMutate(() => {
               this.model.updateTrain(this.activeRosterId, idx, { [field]: val });
             });
@@ -812,10 +1094,18 @@ class BoxDiagramTableEditor {
           const field = e.target.dataset.field;
           if (field) {
             let val = e.target.value;
-            if (field === "stepRows") val = parseInt(val, 10) || 2;
-            this.safeMutate(() => {
-              this.model.updateTrain(this.activeRosterId, idx, { [field]: val });
-            });
+            if (field === "stepRows") {
+              const parsed = parseInt(val, 10);
+              val = Number.isNaN(parsed) ? 2 : Math.max(0, parsed);
+            }
+            if (field === "coupledPartner" || field === "coupledPosition") {
+              this.model.updateTrain(this.activeRosterId, idx, { [field]: val, customCoupled: "" });
+              this.render();
+            } else {
+              this.safeMutate(() => {
+                this.model.updateTrain(this.activeRosterId, idx, { [field]: val });
+              });
+            }
           }
         });
 
@@ -828,7 +1118,9 @@ class BoxDiagramTableEditor {
           const idx = parseInt(tr.dataset.trainIdx, 10);
           const act = btn.dataset.action;
 
-          if (act === "dup-train") {
+          if (act === "split-train") {
+            this.openSplitPopover(btn, idx);
+          } else if (act === "dup-train") {
             this.model.duplicateTrain(this.activeRosterId, idx);
           } else if (act === "del-train") {
             this.model.deleteTrain(this.activeRosterId, idx);
@@ -836,23 +1128,16 @@ class BoxDiagramTableEditor {
             this.model.moveTrain(this.activeRosterId, idx, idx - 1);
           } else if (act === "down-train") {
             this.model.moveTrain(this.activeRosterId, idx, idx + 1);
-          } else if (act === "swap-coupled-order") {
-            const roster = this.model.getRoster(this.activeRosterId);
-            const train = roster.trains[idx];
-            if (train.coupledPartner) {
-              const forward = `(${roster.id}＋${train.coupledPartner})`;
-              const reverse = `(${train.coupledPartner}＋${roster.id})`;
-              const next = (train.customCoupled === reverse) ? forward : reverse;
-              this.model.updateTrain(this.activeRosterId, idx, { customCoupled: next });
-              this.render();
-            }
+          } else if (act === "open-formation-popover") {
+            this.openFormationPopover(btn, idx);
           } else if (act === "toggle-custom-coupled") {
             const roster = this.model.getRoster(this.activeRosterId);
             const train = roster.trains[idx];
             if (train.customCoupled) {
               this.model.updateTrain(this.activeRosterId, idx, { customCoupled: "" });
             } else {
-              const defaultCustom = train.coupledPartner ? `(${roster.id}＋${train.coupledPartner})` : "";
+              const formation = this.model.getFormationOrder(roster.id, train);
+              const defaultCustom = formation.length >= 2 ? `(${formation.join("＋")})` : "";
               this.model.updateTrain(this.activeRosterId, idx, { customCoupled: defaultCustom || "併結" });
             }
             this.render();
@@ -872,7 +1157,47 @@ class BoxDiagramTableEditor {
       }
 
       const rostersTable = this.container.querySelector("#rostersGridTable");
+      const rosterErrBox = this.container.querySelector("#rosterEditErrorBox");
       if (rostersTable) {
+        const updateRosterBadgeDom = (tr, rosterObj) => {
+          const badge = tr.querySelector(".roster-name-badge");
+          if (badge && rosterObj) {
+            badge.className = `roster-name-badge ${rosterObj.customName ? 'is-manual' : 'is-auto'}`;
+            badge.textContent = rosterObj.customName ? "手動" : "自動";
+          }
+          const cell = tr.querySelector(".roster-name-cell");
+          if (cell && rosterObj) {
+            let resetBtn = cell.querySelector("[data-action='reset-roster-name']");
+            if (rosterObj.customName && !resetBtn) {
+              resetBtn = document.createElement("button");
+              resetBtn.type = "button";
+              resetBtn.className = "btn-icon-xs";
+              resetBtn.dataset.action = "reset-roster-name";
+              resetBtn.title = "運用番号と同じ自動同期へ戻す";
+              resetBtn.textContent = "↺";
+              cell.appendChild(resetBtn);
+            } else if (!rosterObj.customName && resetBtn) {
+              resetBtn.remove();
+            }
+          }
+        };
+
+        rostersTable.addEventListener("input", (e) => {
+          const tr = e.target.closest("tr");
+          if (!tr) return;
+          const id = tr.dataset.rosterId;
+          const field = e.target.dataset.rosterField;
+          if (field === "name") {
+            let res;
+            this.safeMutate(() => {
+              res = this.model.updateRoster(id, { name: e.target.value });
+            });
+            if (res && res.ok && res.roster) {
+              updateRosterBadgeDom(tr, res.roster);
+            }
+          }
+        });
+
         rostersTable.addEventListener("change", (e) => {
           const tr = e.target.closest("tr");
           if (!tr) return;
@@ -880,9 +1205,32 @@ class BoxDiagramTableEditor {
           const field = e.target.dataset.rosterField;
           if (field) {
             const val = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+            let res;
             this.safeMutate(() => {
-              this.model.updateRoster(id, { [field]: val });
+              res = this.model.updateRoster(id, { [field]: val });
             });
+            if (res && !res.ok) {
+              if (field === "id") e.target.value = id;
+              if (rosterErrBox) {
+                rosterErrBox.textContent = res.error || "更新できませんでした";
+                rosterErrBox.style.display = "block";
+              }
+              return;
+            }
+            if (rosterErrBox) rosterErrBox.style.display = "none";
+            if (res && res.ok && res.roster) {
+              if (res.oldId !== res.newId) {
+                tr.dataset.rosterId = res.newId;
+                const nameInp = tr.querySelector("[data-roster-field='name']");
+                if (nameInp) {
+                  nameInp.placeholder = res.newId;
+                  if (!res.roster.customName && document.activeElement !== nameInp) {
+                    nameInp.value = res.roster.name;
+                  }
+                }
+              }
+              updateRosterBadgeDom(tr, res.roster);
+            }
           }
         });
 
@@ -897,6 +1245,8 @@ class BoxDiagramTableEditor {
           if (act === "edit-roster-trains") {
             this.setActiveRoster(id);
             this.setActiveTab("tab-trains");
+          } else if (act === "reset-roster-name") {
+            this.model.updateRoster(id, { resetName: true });
           } else if (act === "dup-roster") {
             this.model.duplicateRoster(id);
           } else if (act === "del-roster") {
@@ -1197,6 +1547,16 @@ class BoxDiagramTableEditor {
         });
       }
 
+      const selectPartialStep = this.container.querySelector("#selectPartialConnectStepRows");
+      if (selectPartialStep) {
+        selectPartialStep.addEventListener("change", (e) => {
+          const parsed = parseInt(e.target.value, 10);
+          this.safeMutate(() => {
+            this.model.updateSettings({ partialConnectStepRows: Number.isNaN(parsed) ? 1 : Math.max(0, parsed) });
+          });
+        });
+      }
+
       const inputRowHeight = this.container.querySelector("#inputBaseRowHeight");
       if (inputRowHeight) {
         inputRowHeight.addEventListener("change", (e) => {
@@ -1230,10 +1590,12 @@ class BoxDiagramTableEditor {
           this.model.updateSettings({
             baseRowHeight: 12.96,
             rosterStepRows: 2,
+            partialConnectStepRows: 1,
             blockPaddingRows: 2,
             stationHeaderDirection: "vertical",
             subHeaderMode: "omitFirst",
-            selfHighlightStyle: "red"
+            selfHighlightStyle: "red",
+            autoSyncCoupled: true
           });
           this.render();
         });
