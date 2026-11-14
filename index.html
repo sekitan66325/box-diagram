@@ -70,7 +70,7 @@
           </button>
         </div>
 
-        <!-- JSON 保存 / 読込 -->
+        <!-- JSON / OuDia 保存・読込 -->
         <button id="btnExportJson" class="btn btn-sm btn-secondary" title="現在のダイヤデータをJSONファイルとしてダウンロード保存">
           保存 (JSON)
         </button>
@@ -78,6 +78,11 @@
         <label class="btn btn-sm btn-secondary" title="JSONファイルを読み込んで反映">
           読込 (JSON)
           <input type="file" id="inputFileJson" accept=".json" style="display: none;">
+        </label>
+
+        <label class="btn btn-sm btn-secondary" title="OuDia (.oud) / OuDiaSecond (.oud2) ファイルを読み込んで変換">
+          読込 (.oud/.oud2)
+          <input type="file" id="inputFileOud" accept=".oud,.oud2" style="display: none;">
         </label>
 
         <!-- 印刷 / PDF出力 -->
@@ -285,6 +290,7 @@
               <ul class="help-list">
                 <li><code>保存 (JSON)</code> を押すと、現在編集中の全設定・全運用・注記を含む JSON ファイルがダウンロードされます。</li>
                 <li>次回作業時は <code>読込 (JSON)</code> からそのファイルを選択するだけで状態を復元できます。</li>
+                <li>OuDia / OuDiaSecond の <code>.oud</code>・<code>.oud2</code> ファイルは <code>読込 (.oud/.oud2)</code> から取り込みできます（対象ダイヤや表示駅を選んで変換）。</li>
                 <li>ブラウザを閉じると編集内容は保持されないため、こまめな JSON 保存をおすすめします。</li>
               </ul>
             </div>
@@ -386,9 +392,84 @@
     </div>
   </div>
 
+  <!-- OuDia / OuDiaSecond インポート設定モーダル -->
+  <div id="oudImportModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog oud-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="oudImportModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="oudImportModalTitle" class="modal-title">OuDia / OuDiaSecond (.oud / .oud2) インポート設定</h2>
+          <p id="oudImportSubtitle" class="modal-subtitle">ファイルを解析中…</p>
+        </div>
+        <button id="btnCloseOudImport" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="インポート設定を閉じる">✕</button>
+      </div>
+
+      <div class="modal-body oud-modal-body">
+        <div class="oud-options-grid">
+          <div class="oud-field">
+            <label for="oudSelectDiagram" class="oud-field-label">対象ダイヤ (Dia.)</label>
+            <select id="oudSelectDiagram" class="form-select"></select>
+          </div>
+          <div class="oud-field">
+            <label for="oudSelectEncoding" class="oud-field-label">文字コード</label>
+            <select id="oudSelectEncoding" class="form-select">
+              <option value="auto">自動判定 (UTF-8 / Shift_JIS)</option>
+              <option value="shift_jis">Shift_JIS (OuDia 標準)</option>
+              <option value="utf-8">UTF-8</option>
+            </select>
+          </div>
+          <div class="oud-field">
+            <label for="oudSelectFallback" class="oud-field-label">運用情報なし時 (従来 .oud 等)</label>
+            <select id="oudSelectFallback" class="form-select">
+              <option value="direction">下り / 上りの仮運用へ振り分ける（推奨）</option>
+              <option value="single">単一の「未割当」仮運用にまとめる</option>
+            </select>
+          </div>
+          <div class="oud-field oud-checkbox-stack">
+            <label class="checkbox-simple">
+              <input type="checkbox" id="oudCheckExcludeCanceled" checked />
+              <span>運休扱いの列車を除外する</span>
+            </label>
+            <label class="checkbox-simple">
+              <input type="checkbox" id="oudCheckSameRow" checked />
+              <span>同一列車継走 (PropertySame) を同じ行に描く</span>
+            </label>
+          </div>
+        </div>
+
+        <div id="oudImportSummary" class="oud-summary-box"></div>
+        <ul id="oudImportWarnings" class="oud-warnings-list" hidden></ul>
+
+        <div class="oud-stations-section">
+          <div class="oud-stations-header">
+            <span class="oud-field-label">水平軸に表示する駅（駅名列）</span>
+            <div class="oud-stations-actions">
+              <button type="button" id="btnOudVisRecommended" class="btn btn-xs btn-secondary">主要駅＋始終着（推奨）</button>
+              <button type="button" id="btnOudVisMajor" class="btn btn-xs btn-secondary">主要駅のみ</button>
+              <button type="button" id="btnOudVisEndpoints" class="btn btn-xs btn-secondary">始終着のみ</button>
+              <button type="button" id="btnOudVisAll" class="btn btn-xs btn-secondary">全駅</button>
+            </div>
+          </div>
+          <p class="oud-stations-hint">非表示にした途中駅が発着駅になった場合も、前後の表示駅間に自動で補間配置されます。</p>
+          <div id="oudStationChecklist" class="oud-station-checklist"></div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">
+          ※ インポートを実行すると現在の編集内容は新しいダイヤに置き換わります。
+        </span>
+        <div class="modal-footer-actions">
+          <button type="button" id="btnCancelOudImport" class="btn btn-sm btn-secondary">キャンセル</button>
+          <button type="button" id="btnExecuteOudImport" class="btn btn-sm btn-primary">インポート実行</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- スクリプト読み込み順序 -->
   <script src="js/sample-data.js"></script>
   <script src="js/data-model.js"></script>
+  <script src="js/oud-parser.js"></script>
   <script src="js/diagram-renderer.js"></script>
   <script src="js/table-editor.js"></script>
   <script src="js/app.js"></script>

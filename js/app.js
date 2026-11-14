@@ -27,6 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnRedo = document.getElementById("btnRedo");
   const btnExportJson = document.getElementById("btnExportJson");
   const inputFileJson = document.getElementById("inputFileJson");
+  const inputFileOud = document.getElementById("inputFileOud");
   const btnPrint = document.getElementById("btnPrint");
 
   const splitter = document.getElementById("workspaceSplitter");
@@ -627,6 +628,7 @@ document.addEventListener("DOMContentLoaded", () => {
           return;
         }
         dataModel.load(parsed);
+        tableEditor.setActiveRoster(null);
         alert(`JSONファイル「${file.name}」を読み込みました。`);
       } catch (err) {
         alert(`ファイル解析エラー: ${err.message}`);
@@ -635,6 +637,266 @@ document.addEventListener("DOMContentLoaded", () => {
     };
     reader.readAsText(file);
   });
+
+  // OuDia (.oud) / OuDiaSecond (.oud2) インポート制御
+  const oudImportModalBackdrop = document.getElementById("oudImportModalBackdrop");
+  const btnCloseOudImport = document.getElementById("btnCloseOudImport");
+  const btnCancelOudImport = document.getElementById("btnCancelOudImport");
+  const btnExecuteOudImport = document.getElementById("btnExecuteOudImport");
+  const oudImportSubtitle = document.getElementById("oudImportSubtitle");
+  const oudSelectDiagram = document.getElementById("oudSelectDiagram");
+  const oudSelectEncoding = document.getElementById("oudSelectEncoding");
+  const oudSelectFallback = document.getElementById("oudSelectFallback");
+  const oudCheckExcludeCanceled = document.getElementById("oudCheckExcludeCanceled");
+  const oudCheckSameRow = document.getElementById("oudCheckSameRow");
+  const oudImportSummary = document.getElementById("oudImportSummary");
+  const oudImportWarnings = document.getElementById("oudImportWarnings");
+  const oudStationChecklist = document.getElementById("oudStationChecklist");
+  const btnOudVisRecommended = document.getElementById("btnOudVisRecommended");
+  const btnOudVisMajor = document.getElementById("btnOudVisMajor");
+  const btnOudVisEndpoints = document.getElementById("btnOudVisEndpoints");
+  const btnOudVisAll = document.getElementById("btnOudVisAll");
+
+  const oudState = {
+    buffer: null,
+    fileName: "",
+    parsedDoc: null,
+    selectedVisibleIds: null,
+    lastResult: null
+  };
+
+  function closeOudImportModal() {
+    if (!oudImportModalBackdrop) return;
+    oudImportModalBackdrop.hidden = true;
+  }
+
+  function openOudImportModal() {
+    if (!oudImportModalBackdrop) return;
+    closeHelpModal();
+    closeFeedbackModal();
+    oudImportModalBackdrop.hidden = false;
+  }
+
+  function reparseOudDocument() {
+    if (!oudState.buffer) return;
+    const enc = oudSelectEncoding ? oudSelectEncoding.value : "auto";
+    const parsedDoc = OudParser.parseDocument(oudState.buffer, enc, oudState.fileName);
+    oudState.parsedDoc = parsedDoc;
+
+    if (oudSelectDiagram) {
+      const prevIdx = parseInt(oudSelectDiagram.value, 10);
+      oudSelectDiagram.innerHTML = "";
+      parsedDoc.diagrams.forEach((d, idx) => {
+        const opt = document.createElement("option");
+        opt.value = String(idx);
+        const otLabel = d.operationTables.length > 0 ? ` / 運用${d.operationTables.length}` : "";
+        opt.textContent = `${d.name} (下り${d.kudari.length} / 上り${d.nobori.length}${otLabel})`;
+        oudSelectDiagram.appendChild(opt);
+      });
+      if (!Number.isNaN(prevIdx) && prevIdx >= 0 && prevIdx < parsedDoc.diagrams.length) {
+        oudSelectDiagram.value = String(prevIdx);
+      }
+    }
+
+    oudState.selectedVisibleIds = null;
+    refreshOudPreview();
+  }
+
+  function refreshOudPreview() {
+    if (!oudState.parsedDoc) return;
+    const diaIdx = oudSelectDiagram ? parseInt(oudSelectDiagram.value, 10) || 0 : 0;
+    const opts = {
+      diagramIndex: diaIdx,
+      excludeCanceled: oudCheckExcludeCanceled ? oudCheckExcludeCanceled.checked : true,
+      fallbackMode: oudSelectFallback ? oudSelectFallback.value : "direction",
+      propertySameStepRows: oudCheckSameRow && !oudCheckSameRow.checked ? 1 : 0,
+      visibleStationIds: oudState.selectedVisibleIds ? Array.from(oudState.selectedVisibleIds) : null
+    };
+
+    const result = OudParser.convertToBoxDiagram(oudState.parsedDoc, opts);
+    oudState.lastResult = result;
+    if (!oudState.selectedVisibleIds) {
+      oudState.selectedVisibleIds = new Set(result.recommendedVisibleIds);
+    }
+
+    if (oudImportSubtitle) {
+      const encText = oudState.parsedDoc.encoding === "shift_jis" ? "Shift_JIS" : "UTF-8";
+      oudImportSubtitle.textContent = `${oudState.fileName} ／ ${oudState.parsedDoc.fileType} ／ ${oudState.parsedDoc.rosenName} ／ 文字コード: ${encText}`;
+    }
+
+    if (oudImportSummary) {
+      const st = result.stats;
+      oudImportSummary.innerHTML = "";
+      const metrics = [
+        { label: "表示駅 / 全駅", value: `${st.visibleStationsCount} / ${st.totalStations}` },
+        { label: "列車種別", value: `${st.trainTypesCount} 種` },
+        { label: "抽出運用数", value: `${st.rostersCount} 運用` },
+        { label: "抽出列車数", value: `${st.trainsCount} 本` }
+      ];
+      metrics.forEach(m => {
+        const item = document.createElement("div");
+        item.className = "oud-summary-item";
+        const lbl = document.createElement("span");
+        lbl.className = "oud-summary-label";
+        lbl.textContent = m.label;
+        const val = document.createElement("span");
+        val.className = "oud-summary-value";
+        val.textContent = m.value;
+        item.appendChild(lbl);
+        item.appendChild(val);
+        oudImportSummary.appendChild(item);
+      });
+      const wide = document.createElement("div");
+      wide.className = "oud-summary-item oud-summary-wide";
+      const wideLbl = document.createElement("span");
+      wideLbl.className = "oud-summary-label";
+      wideLbl.textContent = "運用解析モード";
+      const wideVal = document.createElement("span");
+      wideVal.className = "oud-summary-source";
+      wideVal.textContent = st.operationSource;
+      wide.appendChild(wideLbl);
+      wide.appendChild(wideVal);
+      oudImportSummary.appendChild(wide);
+    }
+
+    if (oudImportWarnings) {
+      oudImportWarnings.innerHTML = "";
+      if (result.warnings.length > 0) {
+        result.warnings.forEach(w => {
+          const li = document.createElement("li");
+          li.textContent = w;
+          oudImportWarnings.appendChild(li);
+        });
+        oudImportWarnings.hidden = false;
+      } else {
+        oudImportWarnings.hidden = true;
+      }
+    }
+
+    if (oudStationChecklist) {
+      const endpointSet = new Set(result.usedEndpointIds);
+      oudStationChecklist.innerHTML = "";
+      oudState.parsedDoc.stations.forEach(st => {
+        const label = document.createElement("label");
+        label.className = "oud-station-item";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = oudState.selectedVisibleIds.has(st.id);
+        cb.addEventListener("change", () => {
+          if (cb.checked) {
+            oudState.selectedVisibleIds.add(st.id);
+          } else {
+            if (oudState.selectedVisibleIds.size <= 2) {
+              cb.checked = true;
+              return;
+            }
+            oudState.selectedVisibleIds.delete(st.id);
+          }
+          refreshOudPreview();
+        });
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "oud-station-name";
+        nameSpan.textContent = st.name;
+        nameSpan.title = st.name;
+
+        label.appendChild(cb);
+        label.appendChild(nameSpan);
+
+        if (st.isMajor) {
+          const tag = document.createElement("span");
+          tag.className = "oud-tag oud-tag-major";
+          tag.textContent = "主要";
+          label.appendChild(tag);
+        }
+        if (endpointSet.has(st.id)) {
+          const tag = document.createElement("span");
+          tag.className = "oud-tag oud-tag-end";
+          tag.textContent = "始終";
+          label.appendChild(tag);
+        }
+
+        oudStationChecklist.appendChild(label);
+      });
+    }
+  }
+
+  function applyStationPreset(mode) {
+    if (!oudState.parsedDoc || !oudState.lastResult) return;
+    const allStations = oudState.parsedDoc.stations;
+    let nextIds = [];
+    if (mode === "recommended") {
+      nextIds = oudState.lastResult.recommendedVisibleIds;
+    } else if (mode === "major") {
+      nextIds = allStations.filter(s => s.isMajor).map(s => s.id);
+    } else if (mode === "endpoints") {
+      nextIds = oudState.lastResult.usedEndpointIds;
+    } else {
+      nextIds = allStations.map(s => s.id);
+    }
+
+    const set = new Set(nextIds);
+    if (set.size < 2 && allStations.length >= 2) {
+      set.add(allStations[0].id);
+      set.add(allStations[allStations.length - 1].id);
+    }
+    oudState.selectedVisibleIds = set;
+    refreshOudPreview();
+  }
+
+  if (inputFileOud) {
+    inputFileOud.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        oudState.buffer = await file.arrayBuffer();
+        oudState.fileName = file.name;
+        if (oudSelectEncoding) oudSelectEncoding.value = "auto";
+        reparseOudDocument();
+        openOudImportModal();
+      } catch (err) {
+        alert(`OuDiaファイル解析エラー:\n${err.message}`);
+      }
+      inputFileOud.value = "";
+    });
+  }
+
+  if (oudSelectEncoding) {
+    oudSelectEncoding.addEventListener("change", () => {
+      try {
+        reparseOudDocument();
+      } catch (err) {
+        alert(`文字コード切替エラー:\n${err.message}`);
+      }
+    });
+  }
+  if (oudSelectDiagram) {
+    oudSelectDiagram.addEventListener("change", () => {
+      oudState.selectedVisibleIds = null;
+      refreshOudPreview();
+    });
+  }
+  [oudSelectFallback, oudCheckExcludeCanceled, oudCheckSameRow].forEach(el => {
+    if (el) el.addEventListener("change", refreshOudPreview);
+  });
+  if (btnOudVisRecommended) btnOudVisRecommended.addEventListener("click", () => applyStationPreset("recommended"));
+  if (btnOudVisMajor) btnOudVisMajor.addEventListener("click", () => applyStationPreset("major"));
+  if (btnOudVisEndpoints) btnOudVisEndpoints.addEventListener("click", () => applyStationPreset("endpoints"));
+  if (btnOudVisAll) btnOudVisAll.addEventListener("click", () => applyStationPreset("all"));
+
+  if (btnExecuteOudImport) {
+    btnExecuteOudImport.addEventListener("click", () => {
+      if (!oudState.lastResult || !oudState.lastResult.data) return;
+      const converted = oudState.lastResult.data;
+      const val = dataModel.validateSchema(converted);
+      if (!val.valid) {
+        alert(`インポート失敗:\n${val.errors.join("\n")}`);
+        return;
+      }
+      dataModel.load(converted);
+      tableEditor.setActiveRoster(null);
+      closeOudImportModal();
+    });
+  }
 
   // 印刷 / PDF出力
   btnPrint.addEventListener("click", () => {
@@ -737,6 +999,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function openHelpModal() {
     if (!helpModalBackdrop) return;
     closeFeedbackModal();
+    closeOudImportModal();
     helpModalBackdrop.hidden = false;
     if (helpModalBody) helpModalBody.scrollTop = 0;
     if (helpModalNav) {
@@ -754,6 +1017,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function openFeedbackModal() {
     if (!feedbackModalBackdrop) return;
     closeHelpModal();
+    closeOudImportModal();
     feedbackModalBackdrop.hidden = false;
     if (feedbackFormFrame && feedbackFormFrame.dataset.src && !feedbackFormFrame.getAttribute("src")) {
       if (feedbackLoadingState) feedbackLoadingState.hidden = false;
@@ -790,6 +1054,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   bindModalCloseTriggers(helpModalBackdrop, btnCloseHelp, btnCloseHelpFooter, closeHelpModal);
   bindModalCloseTriggers(feedbackModalBackdrop, btnCloseFeedback, btnCloseFeedbackFooter, closeFeedbackModal);
+  bindModalCloseTriggers(oudImportModalBackdrop, btnCloseOudImport, btnCancelOudImport, closeOudImportModal);
 
   if (helpModalNav && helpModalBody) {
     helpModalNav.querySelectorAll(".help-nav-btn").forEach(btn => {
@@ -812,7 +1077,10 @@ document.addEventListener("DOMContentLoaded", () => {
         closeHelpModal();
       }
     } else if (e.key === "Escape") {
-      if (feedbackModalBackdrop && !feedbackModalBackdrop.hidden) {
+      if (oudImportModalBackdrop && !oudImportModalBackdrop.hidden) {
+        e.preventDefault();
+        closeOudImportModal();
+      } else if (feedbackModalBackdrop && !feedbackModalBackdrop.hidden) {
         e.preventDefault();
         closeFeedbackModal();
       } else if (helpModalBackdrop && !helpModalBackdrop.hidden) {

@@ -164,10 +164,9 @@ class BoxDiagramRenderer {
     const W = 1122.56;
     const H = 1587.36;
 
-    // 主要駅と座標
+    // 主要駅と座標（非表示駅も駅順から線形補間して解決）
     const visibleStations = (data.stations || []).filter(s => s.visible !== false);
-    const stationMap = new Map();
-    visibleStations.forEach(s => stationMap.set(s.id, s.x));
+    const resolveStationX = this.createStationXResolver(data.stations || [], visibleStations);
 
     let elements = [];
 
@@ -323,8 +322,8 @@ class BoxDiagramRenderer {
         const item = trainPositions[k];
         const tr = item.train;
         const yTop = item.y;
-        const fromX = stationMap.get(tr.fromStation) || 200.32;
-        const toX = stationMap.get(tr.toStation) || 987.52;
+        const fromX = resolveStationX(tr.fromStation, 200.32);
+        const toX = resolveStationX(tr.toStation, 987.52);
 
         const type = this.getTrainType(data, tr.typeId);
         const lineColor = type.lineColor || "#000000";
@@ -336,7 +335,7 @@ class BoxDiagramRenderer {
         if (k > 0) {
           const prevItem = trainPositions[k - 1];
           const prevTr = prevItem.train;
-          const prevEndX = stationMap.get(prevTr.toStation);
+          const prevEndX = resolveStationX(prevTr.toStation, undefined);
           
           if (prevEndX !== undefined && Math.abs(prevEndX - fromX) < 1.0) {
             hasIncomingTurnaround = true;
@@ -591,6 +590,46 @@ class BoxDiagramRenderer {
         <polygon points="${p1} ${p2} ${p3}" fill="${fill}" stroke="#223F59" stroke-width="0.32" />
       `);
     }
+  }
+
+  /**
+   * 駅IDからSVGのX座標を解決する関数を生成する（非表示駅は前後表示駅の間に線形補間）
+   */
+  createStationXResolver(allStations, visibleStations) {
+    const visibleMap = new Map();
+    visibleStations.forEach(s => visibleMap.set(s.id, s.x));
+
+    const indexMap = new Map();
+    allStations.forEach((s, idx) => indexMap.set(s.id, idx));
+
+    return (stationId, fallbackX) => {
+      if (visibleMap.has(stationId)) {
+        return visibleMap.get(stationId);
+      }
+      const idx = indexMap.get(stationId);
+      if (idx === undefined) {
+        return fallbackX;
+      }
+
+      let prevIdx = -1;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (allStations[i].visible !== false) { prevIdx = i; break; }
+      }
+      let nextIdx = -1;
+      for (let i = idx + 1; i < allStations.length; i++) {
+        if (allStations[i].visible !== false) { nextIdx = i; break; }
+      }
+
+      if (prevIdx !== -1 && nextIdx !== -1) {
+        const prevX = allStations[prevIdx].x;
+        const nextX = allStations[nextIdx].x;
+        const ratio = (idx - prevIdx) / (nextIdx - prevIdx);
+        return Math.round((prevX + ratio * (nextX - prevX)) * 100) / 100;
+      }
+      if (nextIdx !== -1) return allStations[nextIdx].x;
+      if (prevIdx !== -1) return allStations[prevIdx].x;
+      return fallbackX;
+    };
   }
 
   getTrainType(data, typeId) {
