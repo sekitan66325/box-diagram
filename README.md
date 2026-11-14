@@ -24,8 +24,10 @@
 ## 使い方（クイックスタート）
 
 ### 1. ブラウザで開く
-- **Web版（GitHub Pages を有効にした場合）**:  
-  `https://sekitan66325.github.io/box-diagram/` にアクセスするだけですぐに使えます。
+- **Web版（GitHub Pages）**:  
+  [https://sekitan66325.github.io/box-diagram/](https://sekitan66325.github.io/box-diagram/) にアクセスするだけですぐに使えます。
+- **公開元サイト（真岡鐵道 情報ポータル）**:  
+  [https://sekitan66325.github.io/](https://sekitan66325.github.io/)
 - **ローカルPCで使う場合**:  
   リポジトリをダウンロードまたは `git clone` し、`index.html` を Google Chrome / Microsoft Edge / Firefox などのブラウザで直接開いてください。
 
@@ -46,6 +48,10 @@
 ```text
 box-diagram/
 ├── index.html              # アプリ本体HTML（2ペイン画面・ヘルプ／お問い合わせモーダル）
+├── assets/
+│   ├── favicon.svg         # アプリアイコン（ベクターSVG）
+│   ├── favicon.png         # ファビコン（64x64 PNG）
+│   └── apple-touch-icon.png # モバイル・OGP用アイコン（180x180 PNG）
 ├── css/
 │   └── style.css           # UI・印刷(@media print)用スタイルシート
 ├── js/
@@ -55,7 +61,8 @@ box-diagram/
 │   ├── table-editor.js     # 左パネル表形式エディタUI
 │   └── app.js              # メイン制御・ズーム・印刷・注記ドラッグ吸着
 ├── README.md               # システム概要・クイックスタート
-└── MANUAL.md               # 一般ユーザー向け取扱説明書・仕様書
+├── MANUAL.md               # 一般ユーザー向け取扱説明書・仕様書
+└── PORTAL_GUIDE_SPEC.md    # 親サイト（sekitan66325.github.io）連携案内仕様書
 ```
 
 ---

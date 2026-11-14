@@ -4,6 +4,33 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>箱ダイヤ描画ソフト - 鉄道車両仕業行路図作成システム</title>
+  <meta name="description" content="Excelの罫線引きやセル結合は不要。ブラウザだけで鉄道の箱ダイヤ（車両運用図・仕業行路図）を作成・編集し、1:1ベクターPDFとして出力できる無料Webアプリ（β版）です。">
+  <meta name="theme-color" content="#2F6F73">
+  <link rel="canonical" href="https://sekitan66325.github.io/box-diagram/">
+
+  <meta property="og:title" content="箱ダイヤ描画ソフト - 鉄道車両仕業行路図作成システム">
+  <meta property="og:description" content="ブラウザだけで鉄道の箱ダイヤ（車両運用図・仕業行路図）を作成・編集し、そのままA4/B5のベクターPDFとして出力できる無料Webアプリです。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://sekitan66325.github.io/box-diagram/">
+  <meta property="og:image" content="https://sekitan66325.github.io/box-diagram/assets/apple-touch-icon.png">
+  <meta property="og:site_name" content="箱ダイヤ描画システム">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:site" content="@sekitan66325">
+
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/favicon.png" type="image/png" sizes="64x64">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" sizes="180x180">
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-0GM4B0FTW9"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-0GM4B0FTW9');
+  </script>
+
   <link rel="stylesheet" href="css/style.css">
   <style id="dynamic-print-style">
     @page {
@@ -17,13 +44,17 @@
     <!-- 上部メインツールバー -->
     <header class="app-header">
       <div class="brand">
+        <img src="assets/favicon.svg" alt="" class="brand-icon" width="24" height="24">
         <span class="brand-title">箱ダイヤ描画システム</span>
         <span class="beta-badge" title="一般公開 β版">β版</span>
+        <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="portal-back-link" title="真岡鐵道 情報ポータル（sekitan66325.github.io）を新しいタブで開く">
+          情報ポータル ↗
+        </a>
       </div>
 
       <div class="header-actions">
         <!-- プリセット選択 -->
-        <select id="presetSelect" class="form-select" style="width: 280px; font-weight: 500;">
+        <select id="presetSelect" class="form-select preset-select-control" style="font-weight: 500;">
           <option value="sakuragawa_main">桜川電鉄 本線（全機能体験フルサンプル・2ページ）</option>
           <option value="sakuragawa_exp">桜川電鉄 特急・回送・試運転サンプル</option>
           <option value="midorikawa_compact">緑川鉄道 支線（コンパクト構成サンプル）</option>
@@ -287,12 +318,14 @@
             </div>
           </div>
           <div class="help-support-box">
-            <h4>開発の応援について（任意）</h4>
+            <h4>関連サイト・開発の応援について（任意）</h4>
             <p>
               「箱ダイヤ描画ソフト」はすべての機能を<strong>完全無料</strong>でご利用いただけます。
               もし本ツールがお役に立ちましたら、励ましのレターや温かい応援をいただけますと今後の開発の大きな励みになります（応援は完全に任意です）。
             </p>
             <div class="help-support-actions">
+              <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">真岡鐵道 情報ポータル (sekitan66325.github.io) ↗</a>
+              <a href="https://x.com/sekitan66325" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">X (@sekitan66325) ↗</a>
               <a href="https://ofuse.me/sekitan66325" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">✉ OFUSE で応援レターを送る ↗</a>
             </div>
           </div>
@@ -300,7 +333,9 @@
       </div>
 
       <div class="modal-footer">
-        <span class="text-muted" style="font-size: 11px;">(C) 2026 せきたん — 箱ダイヤ描画ソフト</span>
+        <span class="text-muted" style="font-size: 11px;">
+          (C) 2026 <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="footer-portal-link">せきたん (sekitan66325.github.io) ↗</a> — 箱ダイヤ描画ソフト
+        </span>
         <div class="modal-footer-actions">
           <button id="btnOpenFeedbackFromHelp" type="button" class="btn btn-sm btn-secondary" title="アプリ内フォームでお問い合わせを送る">✉ お問い合わせ</button>
           <a href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary" title="Googleフォームを新しいタブで開く">フォームを別タブで開く ↗</a>
