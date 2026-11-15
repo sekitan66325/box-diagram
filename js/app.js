@@ -54,12 +54,45 @@ document.addEventListener("DOMContentLoaded", () => {
   let zoomMode = "fit-width"; // "fit-width" | "fit" | "manual"
   let currentZoom = 1.0;
   let appliedScale = 1.0;
+  let hasStickyPreviewSettings = false;
   const dismissedSuggestionKeys = new Set();
+
+  const PREVIEW_VIEW_SETTING_KEYS = [
+    "xAxisMode",
+    "pageSize",
+    "orientation",
+    "separatePageSettingsByAxisMode",
+    "timeAxisPageSize",
+    "timeAxisOrientation",
+    "timeAxisStartHour",
+    "timeAxisRangeMode",
+    "timeAxisEndHour",
+    "timeAxisGridMinutes",
+    "timeAxisLateNightFormat",
+    "timeAxisLabelDensity"
+  ];
+
+  function applyStickyPreviewSettings(targetData, excludeKeys = []) {
+    if (!hasStickyPreviewSettings || !targetData || !dataModel.getData()) return targetData;
+    const curSet = dataModel.getSettings() || {};
+    const cloned = JSON.parse(JSON.stringify(targetData));
+    cloned.settings = Object.assign({}, cloned.settings || {});
+    const skip = new Set(excludeKeys);
+    for (const k of PREVIEW_VIEW_SETTING_KEYS) {
+      if (skip.has(k)) continue;
+      if (curSet[k] !== undefined) {
+        cloned.settings[k] = curSet[k];
+      }
+    }
+    return cloned;
+  }
 
   // 3. データ変更リスナー（プレビューの再描画 & Undo/Redo更新）
   dataModel.subscribe((data, actionType) => {
     if (actionType === "load") {
       dismissedSuggestionKeys.clear();
+    } else if (actionType === "settings-update") {
+      hasStickyPreviewSettings = true;
     }
     updateHistoryButtons();
     renderPreview({ resetScroll: actionType === "load" });
@@ -672,15 +705,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 7. ツールバーアクション
   // プリセット切り替え
+  const PRESET_MAP = {
+    sakuragawa_main: PRESET_SAKURAGAWA_MAIN,
+    sakuragawa_exp: PRESET_SAKURAGAWA_EXPRESS,
+    midorikawa_compact: PRESET_MIDORIKAWA_COMPACT,
+    sakuragawa_night: PRESET_SAKURAGAWA_NIGHT
+  };
+
   presetSelect.addEventListener("change", (e) => {
-    const val = e.target.value;
-    if (val === "sakuragawa_main") {
-      dataModel.load(PRESET_SAKURAGAWA_MAIN);
-    } else if (val === "sakuragawa_exp") {
-      dataModel.load(PRESET_SAKURAGAWA_EXPRESS);
-    } else if (val === "midorikawa_compact") {
-      dataModel.load(PRESET_MIDORIKAWA_COMPACT);
-    }
+    const rawPreset = PRESET_MAP[e.target.value];
+    if (!rawPreset) return;
+    const prepared = applyStickyPreviewSettings(rawPreset);
+    dataModel.load(prepared);
     tableEditor.setActiveRoster(null);
   });
 
@@ -742,6 +778,7 @@ document.addEventListener("DOMContentLoaded", () => {
           alert(`インポート失敗:\n${val.errors.join("\n")}`);
           return;
         }
+        hasStickyPreviewSettings = false;
         dataModel.load(parsed);
         tableEditor.setActiveRoster(null);
         alert(`JSONファイル「${file.name}」を読み込みました。`);
@@ -1007,7 +1044,8 @@ document.addEventListener("DOMContentLoaded", () => {
         alert(`インポート失敗:\n${val.errors.join("\n")}`);
         return;
       }
-      dataModel.load(converted);
+      const prepared = applyStickyPreviewSettings(converted, ["timeAxisStartHour"]);
+      dataModel.load(prepared);
       tableEditor.setActiveRoster(null);
       closeOudImportModal();
     });
@@ -1034,6 +1072,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // 横軸モード / クイック用紙コントロール
   if (btnAxisStation) {
     btnAxisStation.addEventListener("click", () => {
+      hasStickyPreviewSettings = true;
       if (dataModel.getSettings().xAxisMode !== "station") {
         currentPageIndex = 1;
         dataModel.updateSettings({ xAxisMode: "station" });
@@ -1042,6 +1081,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (btnAxisTime) {
     btnAxisTime.addEventListener("click", () => {
+      hasStickyPreviewSettings = true;
       if (dataModel.getSettings().xAxisMode !== "time") {
         currentPageIndex = 1;
         dataModel.updateSettings({ xAxisMode: "time" });
@@ -1050,16 +1090,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   if (selectQuickPageSize) {
     selectQuickPageSize.addEventListener("change", (e) => {
+      hasStickyPreviewSettings = true;
       applyEffectivePagePatch({ pageSize: e.target.value });
     });
   }
   if (btnQuickPortrait) {
     btnQuickPortrait.addEventListener("click", () => {
+      hasStickyPreviewSettings = true;
       applyEffectivePagePatch({ orientation: "portrait" });
     });
   }
   if (btnQuickLandscape) {
     btnQuickLandscape.addEventListener("click", () => {
+      hasStickyPreviewSettings = true;
       applyEffectivePagePatch({ orientation: "landscape" });
     });
   }

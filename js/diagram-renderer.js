@@ -511,18 +511,20 @@ class BoxDiagramRenderer {
           const prevItem = trainPositions[k - 1];
           const prevTr = prevItem.train;
           const prevEndX = resolveStationX(prevTr.toStation, undefined);
-          
+
           if (prevEndX !== undefined && Math.abs(prevEndX - fromX) < 1.0) {
             hasIncomingTurnaround = true;
-            // 縦線描画
-            const vY1 = prevItem.y;
-            const vY2 = yTop + 1.28;
-            const vX = fromX - 0.64;
-            // 折り返し線の色（自身が回送または前が回送なら回送色）
-            const vColor = (tr.typeId === "deadhead" || prevTr.typeId === "deadhead") ? (type.lineColor || "#E3702E") : "#000000";
-            elements.push(`
-              <rect x="${vX.toFixed(2)}" y="${vY1.toFixed(2)}" width="1.28" height="${(vY2 - vY1).toFixed(2)}" fill="${vColor}" />
-            `);
+            // 入庫 (△/▲) -> 出庫 (○/●) の間は車両基地入庫中のため垂直接続線を描画しない
+            if (!this.isDepotTurnaroundBreak(prevTr, tr)) {
+              const vY1 = prevItem.y;
+              const vY2 = yTop + 1.28;
+              const vX = fromX - 0.64;
+              // 折り返し線の色（自身が回送または前が回送なら回送色）
+              const vColor = (tr.typeId === "deadhead" || prevTr.typeId === "deadhead") ? (type.lineColor || "#E3702E") : "#000000";
+              elements.push(`
+                <rect x="${vX.toFixed(2)}" y="${vY1.toFixed(2)}" width="1.28" height="${(vY2 - vY1).toFixed(2)}" fill="${vColor}" />
+              `);
+            }
           }
         }
 
@@ -681,6 +683,17 @@ class BoxDiagramRenderer {
     }
 
     return `<tspan fill="${defaultTextColor}">${this.escapeXml(fullText)}</tspan>`;
+  }
+
+  /**
+   * 前列車が入庫/終結 (△/▲) かつ次列車が出庫/出区 (○/●) の場合は
+   * 同一駅でも折り返し接続線（垂直線／待機線）を描画しない
+   */
+  isDepotTurnaroundBreak(prevTrain, curTrain) {
+    if (!prevTrain || !curTrain) return false;
+    const isPrevInDepot = prevTrain.arrSymbol === "triangle" || prevTrain.arrSymbol === "triangle_filled";
+    const isCurOutDepot = curTrain.depSymbol === "circle" || curTrain.depSymbol === "circle_filled";
+    return isPrevInDepot && isCurOutDepot;
   }
 
   /**
@@ -1118,7 +1131,7 @@ class BoxDiagramRenderer {
       return Object.assign({}, it, { x1, x2: visualX2, exactX2: x2 });
     });
 
-    // 1. 連続折り返し待機線（前着駅 === 次発駅）
+    // 1. 連続折り返し待機線（前着駅 === 次発駅、かつ入庫→出庫でない場合）
     for (let i = 1; i < geomItems.length; i++) {
       const prev = geomItems[i - 1];
       const cur = geomItems[i];
@@ -1126,6 +1139,7 @@ class BoxDiagramRenderer {
         prev.train.toStation &&
         cur.train.fromStation &&
         prev.train.toStation === cur.train.fromStation &&
+        !this.isDepotTurnaroundBreak(prev.train, cur.train) &&
         cur.x1 - prev.exactX2 >= 1.5
       ) {
         elements.push(`
