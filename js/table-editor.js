@@ -474,6 +474,12 @@ class BoxDiagramTableEditor {
             ${trains.map((tr, idx) => this.renderTrainRow(tr, idx, currentRoster, rosters, stations, trainTypes, idx > 0 ? trains[idx - 1] : null)).join("")}
           </tbody>
         </table>
+        ${trains.length === 0 ? `
+          <div class="empty-trains-guide">
+            <p>この運用（${this.escapeXml(currentRoster.name || currentRoster.id)}）にはまだ列車が登録されていません。</p>
+            <button type="button" id="btnAddFirstTrainInline" class="btn btn-sm btn-primary">＋ 1本目の列車を追加</button>
+          </div>
+        ` : ''}
       </div>
 
       <div class="table-footer-info">
@@ -1273,6 +1279,13 @@ class BoxDiagramTableEditor {
         btnFirstRoster.addEventListener("click", () => {
           const id = this.model.addRoster({ id: "A1", name: "A1" });
           this.setActiveRoster(id);
+        });
+      }
+
+      const btnFirstTrainInline = this.container.querySelector("#btnAddFirstTrainInline");
+      if (btnFirstTrainInline) {
+        btnFirstTrainInline.addEventListener("click", () => {
+          this.model.addTrain(this.activeRosterId);
         });
       }
 

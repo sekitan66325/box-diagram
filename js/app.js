@@ -22,7 +22,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const diagramRenderer = new BoxDiagramRenderer({ interactive: true });
 
   // DOM要素参照
+  const btnNewDiagram = document.getElementById("btnNewDiagram");
   const presetSelect = document.getElementById("presetSelect");
+  const optPresetCustom = document.getElementById("optPresetCustom");
+  const welcomeSampleBar = document.getElementById("welcomeSampleBar");
+  const btnWelcomeNewDiagram = document.getElementById("btnWelcomeNewDiagram");
+  const btnWelcomeOpenFile = document.getElementById("btnWelcomeOpenFile");
+  const btnDismissWelcomeBar = document.getElementById("btnDismissWelcomeBar");
   const btnUndo = document.getElementById("btnUndo");
   const btnRedo = document.getElementById("btnRedo");
   const btnExportJson = document.getElementById("btnExportJson");
@@ -833,7 +839,29 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 7. ツールバーアクション
-  // プリセット切り替え
+  // プリセット切り替え / サンプル案内バナー状態
+  let isWelcomeDismissed = false;
+  let isSampleMode = true;
+
+  function updateDocumentSourceUI(mode, customLabel = "") {
+    if (mode === "sample") {
+      isSampleMode = true;
+      if (optPresetCustom) optPresetCustom.hidden = true;
+      if (presetSelect && (customLabel || presetSelect.value === "__custom__")) {
+        presetSelect.value = customLabel || "sakuragawa_main";
+      }
+      if (welcomeSampleBar) welcomeSampleBar.hidden = isWelcomeDismissed;
+    } else {
+      isSampleMode = false;
+      if (optPresetCustom) {
+        optPresetCustom.textContent = customLabel || "作成中データ";
+        optPresetCustom.hidden = false;
+      }
+      if (presetSelect) presetSelect.value = "__custom__";
+      if (welcomeSampleBar) welcomeSampleBar.hidden = true;
+    }
+  }
+
   const PRESET_MAP = {
     sakuragawa_main: PRESET_SAKURAGAWA_MAIN,
     midorikawa_compact: PRESET_MIDORIKAWA_COMPACT
@@ -843,9 +871,22 @@ document.addEventListener("DOMContentLoaded", () => {
     const rawPreset = PRESET_MAP[e.target.value];
     if (!rawPreset) return;
     const prepared = applyStickyPreviewSettings(rawPreset);
+    updateDocumentSourceUI("sample", e.target.value);
     dataModel.load(prepared);
     tableEditor.setActiveRoster(null);
   });
+
+  if (btnDismissWelcomeBar) {
+    btnDismissWelcomeBar.addEventListener("click", () => {
+      isWelcomeDismissed = true;
+      if (welcomeSampleBar) welcomeSampleBar.hidden = true;
+    });
+  }
+  if (btnWelcomeOpenFile && inputFileOpen) {
+    btnWelcomeOpenFile.addEventListener("click", () => {
+      inputFileOpen.click();
+    });
+  }
 
   // Undo / Redo
   btnUndo.addEventListener("click", () => {
@@ -921,6 +962,8 @@ document.addEventListener("DOMContentLoaded", () => {
             hasStickyPreviewSettings = false;
             dataModel.load(parsed);
             tableEditor.setActiveRoster(null);
+            const loadedTitle = (parsed.metadata && parsed.metadata.title) ? parsed.metadata.title : file.name;
+            updateDocumentSourceUI("custom", `読込: ${loadedTitle}`);
             alert(`JSONファイル「${file.name}」を読み込みました。`);
           } else {
             openOudBuffer(await file.arrayBuffer(), file.name);
@@ -970,6 +1013,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!oudImportModalBackdrop) return;
     closeHelpModal();
     closeFeedbackModal();
+    closeNewDiagramModal();
     oudImportModalBackdrop.hidden = false;
   }
 
@@ -1174,6 +1218,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const prepared = applyStickyPreviewSettings(converted, ["timeAxisStartHour"]);
       dataModel.load(prepared);
       tableEditor.setActiveRoster(null);
+      const importedTitle = (prepared.metadata && prepared.metadata.title) ? prepared.metadata.title : (oudState.fileName || "OUD読込データ");
+      updateDocumentSourceUI("custom", `読込: ${importedTitle}`);
       closeOudImportModal();
     });
   }
@@ -1446,7 +1492,205 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 8. 使い方・ヘルプ / お問い合わせ モーダル制御
+  // 8. 新規ダイヤ作成 / 使い方・ヘルプ / お問い合わせ モーダル制御
+  const newDiagramModalBackdrop = document.getElementById("newDiagramModalBackdrop");
+  const btnCloseNewDiagram = document.getElementById("btnCloseNewDiagram");
+  const btnCancelNewDiagram = document.getElementById("btnCancelNewDiagram");
+  const btnExecuteNewDiagram = document.getElementById("btnExecuteNewDiagram");
+  const inputNewTitle = document.getElementById("inputNewTitle");
+  const inputNewCopyright = document.getElementById("inputNewCopyright");
+  const newStationsList = document.getElementById("newStationsList");
+  const btnAddNewStation = document.getElementById("btnAddNewStation");
+  const selectNewRosterCount = document.getElementById("selectNewRosterCount");
+  const selectNewLayout = document.getElementById("selectNewLayout");
+  const selectNewTypes = document.getElementById("selectNewTypes");
+  const checkNewStarterTrain = document.getElementById("checkNewStarterTrain");
+
+  let newDiagramStations = [];
+
+  function resetNewStationsDraft() {
+    newDiagramStations = [
+      { name: "始発駅", abbr: "始", abbrManual: false },
+      { name: "主要駅", abbr: "主", abbrManual: false },
+      { name: "終着駅", abbr: "終", abbrManual: false }
+    ];
+  }
+
+  function renderNewStationsList() {
+    if (!newStationsList) return;
+    newStationsList.innerHTML = "";
+    const canDelete = newDiagramStations.length > 2;
+
+    newDiagramStations.forEach((st, idx) => {
+      const row = document.createElement("div");
+      row.className = "new-station-row";
+
+      const idxSpan = document.createElement("span");
+      idxSpan.className = "new-station-idx font-mono";
+      idxSpan.textContent = String(idx + 1);
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "form-control";
+      nameInput.value = st.name;
+      nameInput.placeholder = `駅${idx + 1}（例: 東京）`;
+
+      const abbrInput = document.createElement("input");
+      abbrInput.type = "text";
+      abbrInput.className = "form-control text-center";
+      abbrInput.maxLength = 4;
+      abbrInput.value = st.abbr;
+      abbrInput.placeholder = "略称";
+
+      nameInput.addEventListener("input", (e) => {
+        st.name = e.target.value;
+        if (!st.abbrManual) {
+          const trimmed = st.name.trim();
+          st.abbr = trimmed ? trimmed.slice(0, 1) : "";
+          abbrInput.value = st.abbr;
+        }
+      });
+
+      abbrInput.addEventListener("input", (e) => {
+        const val = e.target.value;
+        st.abbr = val;
+        st.abbrManual = val.trim().length > 0;
+      });
+
+      const moveBox = document.createElement("div");
+      moveBox.className = "new-station-move-btns";
+      const btnUp = document.createElement("button");
+      btnUp.type = "button";
+      btnUp.className = "btn btn-xs btn-secondary";
+      btnUp.textContent = "↑";
+      btnUp.title = "上へ";
+      btnUp.disabled = idx === 0;
+      btnUp.addEventListener("click", () => {
+        if (idx <= 0) return;
+        const item = newDiagramStations.splice(idx, 1)[0];
+        newDiagramStations.splice(idx - 1, 0, item);
+        renderNewStationsList();
+      });
+
+      const btnDown = document.createElement("button");
+      btnDown.type = "button";
+      btnDown.className = "btn btn-xs btn-secondary";
+      btnDown.textContent = "↓";
+      btnDown.title = "下へ";
+      btnDown.disabled = idx === newDiagramStations.length - 1;
+      btnDown.addEventListener("click", () => {
+        if (idx >= newDiagramStations.length - 1) return;
+        const item = newDiagramStations.splice(idx, 1)[0];
+        newDiagramStations.splice(idx + 1, 0, item);
+        renderNewStationsList();
+      });
+      moveBox.appendChild(btnUp);
+      moveBox.appendChild(btnDown);
+
+      const btnDel = document.createElement("button");
+      btnDel.type = "button";
+      btnDel.className = "btn btn-xs btn-secondary";
+      btnDel.textContent = "✕";
+      btnDel.title = canDelete ? "この駅を削除" : "駅は最低2つ必要です";
+      btnDel.disabled = !canDelete;
+      btnDel.addEventListener("click", () => {
+        if (newDiagramStations.length <= 2) return;
+        newDiagramStations.splice(idx, 1);
+        renderNewStationsList();
+      });
+
+      row.appendChild(idxSpan);
+      row.appendChild(nameInput);
+      row.appendChild(abbrInput);
+      row.appendChild(moveBox);
+      row.appendChild(btnDel);
+      newStationsList.appendChild(row);
+    });
+  }
+
+  function closeNewDiagramModal() {
+    if (!newDiagramModalBackdrop) return;
+    newDiagramModalBackdrop.hidden = true;
+  }
+
+  function openNewDiagramModal() {
+    if (!newDiagramModalBackdrop) return;
+    closeHelpModal();
+    closeFeedbackModal();
+    closeOudImportModal();
+    if (inputNewTitle) inputNewTitle.value = "新規路線 車両運用図";
+    if (inputNewCopyright) inputNewCopyright.value = "";
+    if (selectNewRosterCount) selectNewRosterCount.value = "1";
+    if (selectNewLayout) selectNewLayout.value = "station_a4_portrait";
+    if (selectNewTypes) selectNewTypes.value = "standard";
+    if (checkNewStarterTrain) checkNewStarterTrain.checked = false;
+    resetNewStationsDraft();
+    renderNewStationsList();
+    newDiagramModalBackdrop.hidden = false;
+    if (inputNewTitle) {
+      inputNewTitle.focus();
+      inputNewTitle.select();
+    }
+  }
+
+  if (btnNewDiagram) btnNewDiagram.addEventListener("click", openNewDiagramModal);
+  if (btnWelcomeNewDiagram) btnWelcomeNewDiagram.addEventListener("click", openNewDiagramModal);
+
+  if (btnAddNewStation) {
+    btnAddNewStation.addEventListener("click", () => {
+      const n = newDiagramStations.length + 1;
+      newDiagramStations.push({ name: `駅${n}`, abbr: String(n), abbrManual: false });
+      renderNewStationsList();
+      if (newStationsList) {
+        newStationsList.scrollTop = newStationsList.scrollHeight;
+        const inputs = newStationsList.querySelectorAll('.new-station-row input[type="text"]');
+        if (inputs.length >= 2) {
+          const lastNameInput = inputs[inputs.length - 2];
+          lastNameInput.focus();
+          lastNameInput.select();
+        }
+      }
+    });
+  }
+
+  if (btnExecuteNewDiagram) {
+    btnExecuteNewDiagram.addEventListener("click", () => {
+      const cleanedStations = newDiagramStations
+        .map(s => ({ name: String(s.name || "").trim(), abbr: String(s.abbr || "").trim() }))
+        .filter(s => s.name.length > 0);
+      if (cleanedStations.length < 2) {
+        alert("駅を2つ以上入力してください。");
+        return;
+      }
+
+      const titleVal = inputNewTitle ? inputNewTitle.value.trim() : "";
+      const copyVal = inputNewCopyright ? inputNewCopyright.value.trim() : "";
+      const rosterCount = selectNewRosterCount ? parseInt(selectNewRosterCount.value, 10) : 1;
+      const layoutPreset = selectNewLayout ? selectNewLayout.value : "station_a4_portrait";
+      const typePreset = selectNewTypes ? selectNewTypes.value : "standard";
+      const includeStarterTrain = checkNewStarterTrain ? checkNewStarterTrain.checked : false;
+
+      const newData = BoxDiagramDataModel.createNewDiagramData({
+        title: titleVal || "新規路線 車両運用図",
+        copyright: copyVal,
+        stations: cleanedStations,
+        rosterCount,
+        layoutPreset,
+        typePreset,
+        includeStarterTrain
+      });
+
+      hasStickyPreviewSettings = false;
+      currentPageIndex = 1;
+      dataModel.load(newData);
+      const firstRoster = (newData.rosters && newData.rosters[0]) ? newData.rosters[0].id : null;
+      tableEditor.setActiveRoster(firstRoster);
+      tableEditor.setActiveTab(firstRoster ? "tab-trains" : "tab-rosters");
+      updateDocumentSourceUI("custom", `作成中: ${newData.metadata.title}`);
+      closeNewDiagramModal();
+    });
+  }
+
   const btnHelp = document.getElementById("btnHelp");
   const helpModalBackdrop = document.getElementById("helpModalBackdrop");
   const btnCloseHelp = document.getElementById("btnCloseHelp");
@@ -1466,6 +1710,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!helpModalBackdrop) return;
     closeFeedbackModal();
     closeOudImportModal();
+    closeNewDiagramModal();
     helpModalBackdrop.hidden = false;
     if (helpModalBody) helpModalBody.scrollTop = 0;
     if (helpModalNav) {
@@ -1484,6 +1729,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!feedbackModalBackdrop) return;
     closeHelpModal();
     closeOudImportModal();
+    closeNewDiagramModal();
     feedbackModalBackdrop.hidden = false;
     if (feedbackFormFrame && feedbackFormFrame.dataset.src && !feedbackFormFrame.getAttribute("src")) {
       if (feedbackLoadingState) feedbackLoadingState.hidden = false;
@@ -1521,6 +1767,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindModalCloseTriggers(helpModalBackdrop, btnCloseHelp, btnCloseHelpFooter, closeHelpModal);
   bindModalCloseTriggers(feedbackModalBackdrop, btnCloseFeedback, btnCloseFeedbackFooter, closeFeedbackModal);
   bindModalCloseTriggers(oudImportModalBackdrop, btnCloseOudImport, btnCancelOudImport, closeOudImportModal);
+  bindModalCloseTriggers(newDiagramModalBackdrop, btnCloseNewDiagram, btnCancelNewDiagram, closeNewDiagramModal);
 
   if (helpModalNav && helpModalBody) {
     helpModalNav.querySelectorAll(".help-nav-btn").forEach(btn => {
@@ -1543,7 +1790,10 @@ document.addEventListener("DOMContentLoaded", () => {
         closeHelpModal();
       }
     } else if (e.key === "Escape") {
-      if (oudImportModalBackdrop && !oudImportModalBackdrop.hidden) {
+      if (newDiagramModalBackdrop && !newDiagramModalBackdrop.hidden) {
+        e.preventDefault();
+        closeNewDiagramModal();
+      } else if (oudImportModalBackdrop && !oudImportModalBackdrop.hidden) {
         e.preventDefault();
         closeOudImportModal();
       } else if (feedbackModalBackdrop && !feedbackModalBackdrop.hidden) {
@@ -1557,6 +1807,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // 初回プレビュー描画
+  updateDocumentSourceUI("sample", "sakuragawa_main");
   renderPreview();
   updateHistoryButtons();
   updatePrintPageStyle(dataModel.getData());

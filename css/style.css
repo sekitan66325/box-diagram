@@ -146,7 +146,7 @@ html, body {
 }
 
 .preset-select-control {
-  width: clamp(160px, 16vw, 250px);
+  width: clamp(140px, 14vw, 220px);
 }
 
 .footer-portal-link {
@@ -287,6 +287,19 @@ html, body {
 
 .btn-secondary {
   background-color: var(--bg-subtle);
+}
+
+.btn-primary-outline {
+  background-color: var(--primary-light);
+  border-color: var(--primary);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.btn-primary-outline:hover:not(:disabled) {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-text);
 }
 
 .btn-sm {
@@ -1688,6 +1701,128 @@ html, body {
 }
 
 /* ==========================================================================
+   見本案内バー / 空列車ガイド / 新規ダイヤ作成モーダル
+   ========================================================================== */
+.welcome-sample-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 14px;
+  background-color: #f0fdfa;
+  border-bottom: 1px solid #99f6e4;
+  color: #134e4a;
+  font-size: 11.5px;
+  flex-shrink: 0;
+}
+
+.welcome-sample-bar[hidden] {
+  display: none !important;
+}
+
+.welcome-sample-msg {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  line-height: 1.4;
+}
+
+.welcome-sample-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background-color: var(--primary);
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.welcome-sample-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.empty-trains-guide {
+  margin: 18px 8px 8px;
+  padding: 18px 16px;
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-subtle);
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.new-diagram-modal-dialog {
+  width: min(680px, 100%);
+  max-height: min(88vh, 780px);
+}
+
+.new-diagram-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.new-form-grid {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 12px;
+}
+
+.new-form-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.new-stations-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.new-stations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background-color: var(--bg-subtle);
+}
+
+.new-station-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 78px 66px 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-station-idx {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.new-station-move-btns {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+/* ==========================================================================
    モバイル・タブレット狭幅対応 (900px以下)
    ========================================================================== */
 .mobile-workspace-nav {
@@ -1793,6 +1928,7 @@ html, body {
     gap: 4px;
   }
 
+  .welcome-sample-bar,
   .layout-suggestion-bar {
     flex-direction: column;
     align-items: flex-start;
@@ -1853,8 +1989,13 @@ html, body {
   }
   .help-steps,
   .help-columns,
-  .oud-options-grid {
+  .oud-options-grid,
+  .new-form-grid,
+  .new-form-options-grid {
     grid-template-columns: 1fr;
+  }
+  .new-station-row {
+    grid-template-columns: 24px 1fr 64px 56px 26px;
   }
   .oud-summary-box {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1879,6 +2020,7 @@ html, body {
   .editor-pane,
   .workspace-splitter,
   .preview-toolbar,
+  .welcome-sample-bar,
   .layout-suggestion-bar,
   .modal-backdrop {
     display: none !important;

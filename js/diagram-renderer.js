@@ -186,17 +186,17 @@ class BoxDiagramRenderer {
     const cfg = overridePageCfg || ((typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.getEffectivePageConfig)
       ? BoxDiagramDataModel.getEffectivePageConfig(settings)
       : {
-          xAxisMode: settings.xAxisMode === "time" ? "time" : "station",
-          isSeparateMode: !!settings.separatePageSettingsByAxisMode,
-          pageSize: settings.pageSize || "A4",
-          orientation: settings.orientation === "landscape" ? "landscape" : "portrait",
-          isLandscape: settings.orientation === "landscape",
-          canvasW: settings.orientation === "landscape" ? 1587.36 : 1122.56,
-          canvasH: settings.orientation === "landscape" ? 1122.56 : 1587.36,
-          canvasScale: 1.0,
-          isAutoPageSize: false,
-          isCustomPageSize: false
-        });
+        xAxisMode: settings.xAxisMode === "time" ? "time" : "station",
+        isSeparateMode: !!settings.separatePageSettingsByAxisMode,
+        pageSize: settings.pageSize || "A4",
+        orientation: settings.orientation === "landscape" ? "landscape" : "portrait",
+        isLandscape: settings.orientation === "landscape",
+        canvasW: settings.orientation === "landscape" ? 1587.36 : 1122.56,
+        canvasH: settings.orientation === "landscape" ? 1122.56 : 1587.36,
+        canvasScale: 1.0,
+        isAutoPageSize: false,
+        isCustomPageSize: false
+      });
 
     const round2 = (v) => Math.round(v * 100) / 100;
     const W = cfg.canvasW;
@@ -460,10 +460,10 @@ class BoxDiagramRenderer {
     const presetMap = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.FONT_PRESETS)
       ? BoxDiagramDataModel.FONT_PRESETS
       : {
-          F1: { css: resolveFontCss("F1", "F1") },
-          F2: { css: resolveFontCss("F2", "F2") },
-          F3: { css: resolveFontCss("F3", "F3") }
-        };
+        F1: { css: resolveFontCss("F1", "F1") },
+        F2: { css: resolveFontCss("F2", "F2") },
+        F3: { css: resolveFontCss("F3", "F3") }
+      };
     const presetRules = Object.keys(presetMap)
       .map(k => `.font-preset-${k} { font-family: ${presetMap[k].css}; }`)
       .join("\n            ");
@@ -485,6 +485,8 @@ class BoxDiagramRenderer {
             .train-line-group { cursor: pointer; }
             .train-line-group:hover line { stroke-width: 2.2px; }
             .diagram-note:hover text { text-decoration: underline; }
+            .diagram-empty-hint { pointer-events: none; }
+            @media print { .diagram-empty-hint { display: none; } }
           </style>
         </defs>
         <rect width="${W}" height="${H}" fill="#FFFFFF" />
@@ -652,6 +654,9 @@ class BoxDiagramRenderer {
       elements.push(`
         <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
       `);
+      if (this.options.interactive && rIdx === 0 && pageRosters.every(r => (r.trains || []).length === 0)) {
+        this.appendEmptyRosterHint(elements, geom.stationPlotLeft, geom.stationPlotRight, prevBlockBorderBottom, blockBottomBorderTop);
+      }
 
       // 列車と折り返し線を描画
       for (let k = 0; k < trainPositions.length; k++) {
@@ -699,13 +704,15 @@ class BoxDiagramRenderer {
 
         // 破線スタイル
         const dashAttr = type.lineStyle === "dashed" ? `stroke-dasharray="6,3"` : (type.lineStyle === "dotted" ? `stroke-dasharray="2,2"` : ``);
+        const yLineCenter = yTop + 0.64;
+        const hitW = Math.max(lineW, 6);
+        const hitX = lineW >= 6 ? minX : (minX - (6 - lineW) / 2);
 
-        const hitW = Math.max(maxX - minX, 6);
         elements.push(`
           <g class="train-line-group ${isSelected ? 'selected' : ''}" data-roster-id="${this.escapeXml(roster.id)}" data-train-index="${k}">
-            ${isSelected ? `<line x1="${minX.toFixed(2)}" y1="${(yTop + 0.64).toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${(yTop + 0.64).toFixed(2)}" ${selectedGlow} />` : ''}
-            <line x1="${minX.toFixed(2)}" y1="${(yTop + 0.64).toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${(yTop + 0.64).toFixed(2)}" stroke="${lineColor}" stroke-width="1.28" ${dashAttr} />
-            ${this.options.interactive ? `<rect x="${minX.toFixed(2)}" y="${(yTop + 0.64 - 5).toFixed(2)}" width="${hitW.toFixed(2)}" height="10" fill="transparent" />` : ''}
+            ${isSelected ? `<line x1="${minX.toFixed(2)}" y1="${yLineCenter.toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${yLineCenter.toFixed(2)}" ${selectedGlow} />` : ''}
+            <line x1="${minX.toFixed(2)}" y1="${yLineCenter.toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${yLineCenter.toFixed(2)}" stroke="${lineColor}" stroke-width="1.28" ${dashAttr} />
+            ${this.options.interactive ? `<rect x="${hitX.toFixed(2)}" y="${(yLineCenter - 5).toFixed(2)}" width="${hitW.toFixed(2)}" height="10" fill="transparent" />` : ''}
           </g>
         `);
 
@@ -1256,6 +1263,9 @@ class BoxDiagramRenderer {
       elements.push(`
         <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
       `);
+      if (this.options.interactive && rIdx === 0 && pageRosters.every(r => (r.trains || []).length === 0)) {
+        this.appendEmptyRosterHint(elements, timePlotLeft, timePlotRight, prevBlockBorderBottom, blockBottomBorderTop);
+      }
 
       // 各レーン描画
       for (let li = 0; li < lanes.length; li++) {
@@ -1687,12 +1697,23 @@ class BoxDiagramRenderer {
       .replace(/'/g, "&apos;");
   }
 
+  appendEmptyRosterHint(elements, leftX, rightX, topY, bottomY) {
+    const hintX = ((leftX + rightX) / 2).toFixed(2);
+    const hintY = ((topY + bottomY) / 2 + 4.0).toFixed(2);
+    elements.push(`
+      <text class="font-f1 diagram-empty-hint" x="${hintX}" y="${hintY}" font-size="11.5" fill="#94A3B8" text-anchor="middle">「列車表」→「＋ 列車追加」から1本目の列車を入力できます</text>
+    `);
+  }
+
   renderEmptySvg(data) {
     const geom = this.getPageGeometry(data || {});
+    const cx = (geom.W / 2).toFixed(2);
+    const cy = (geom.H / 2).toFixed(2);
     return `
       <svg class="box-diagram-svg" viewBox="0 0 ${geom.W} ${geom.H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
         <rect width="${geom.W}" height="${geom.H}" fill="#FFFFFF" />
-        <text x="${(geom.W / 2).toFixed(2)}" y="${(geom.H / 2).toFixed(2)}" font-size="20" fill="#999999" text-anchor="middle">表示可能な運用データがありません</text>
+        <text x="${cx}" y="${(geom.H / 2 - 14).toFixed(2)}" font-size="19" fill="#64748B" text-anchor="middle">表示可能な運用データがありません</text>
+        <text class="diagram-empty-hint" x="${cx}" y="${(geom.H / 2 + 16).toFixed(2)}" font-size="13" fill="#94A3B8" text-anchor="middle">「運用一覧」タブから運用（A1など）を追加するか、上部の「＋ 新規作成」をご利用ください</text>
       </svg>
     `;
   }

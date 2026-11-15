@@ -231,6 +231,129 @@ class BoxDiagramDataModel {
     };
   }
 
+  /**
+   * 新規ダイヤ作成用のクリーンな初期データ(v2.0)を構築する
+   */
+  static createNewDiagramData(options = {}) {
+    const title = (typeof options.title === "string" && options.title.trim())
+      ? options.title.trim()
+      : "新規路線 車両運用図";
+    const copyright = typeof options.copyright === "string" ? options.copyright.trim() : "";
+
+    const rawStations = Array.isArray(options.stations)
+      ? options.stations.filter(s => s && String(s.name || "").trim())
+      : [];
+    const baseStations = rawStations.length >= 2
+      ? rawStations
+      : [
+          { name: "始発駅", abbr: "始" },
+          { name: "主要駅", abbr: "主" },
+          { name: "終着駅", abbr: "終" }
+        ];
+
+    const leftX = 200.32;
+    const rightX = 987.52;
+    const span = rightX - leftX;
+    const step = span / Math.max(1, baseStations.length - 1);
+    const stations = baseStations.map((st, idx) => {
+      const name = String(st.name || "").trim() || `駅${idx + 1}`;
+      const rawAbbr = String(st.abbr || "").trim();
+      const abbr = rawAbbr || name.slice(0, 1);
+      return {
+        id: `st_${idx + 1}`,
+        name,
+        abbr,
+        visible: true,
+        x: Math.round((leftX + idx * step) * 100) / 100
+      };
+    });
+
+    const sourceTypes = (typeof DEFAULT_TRAIN_TYPES !== "undefined" && Array.isArray(DEFAULT_TRAIN_TYPES))
+      ? DEFAULT_TRAIN_TYPES
+      : [
+          { id: "local", name: "普通", lineColor: "#000000", timeColor: "#000000", textColor: "#000000", lineWidth: 1.28, lineStyle: "solid", font: "F1", prefix: "" }
+        ];
+    const simpleIds = new Set(["local", "rapid", "deadhead"]);
+    const filteredTypes = options.typePreset === "simple"
+      ? sourceTypes.filter(t => simpleIds.has(t.id))
+      : sourceTypes;
+    const trainTypes = JSON.parse(JSON.stringify(filteredTypes.length > 0 ? filteredTypes : sourceTypes));
+
+    const rosterCountRaw = parseInt(options.rosterCount, 10);
+    const rosterCount = Number.isNaN(rosterCountRaw) ? 1 : Math.max(0, Math.min(6, rosterCountRaw));
+    const includeStarterTrain = !!options.includeStarterTrain;
+
+    const rosters = [];
+    for (let i = 0; i < rosterCount; i++) {
+      const rName = `A${i + 1}`;
+      const trains = [];
+      if (i === 0 && includeStarterTrain && stations.length >= 2) {
+        trains.push({
+          trainNo: "102",
+          typeId: trainTypes[0].id || "local",
+          fromStation: stations[0].id,
+          depTime: "6:00",
+          toStation: stations[stations.length - 1].id,
+          arrTime: "6:45",
+          coupledPartner: "",
+          coupledPosition: "after",
+          coupledFormation: null,
+          customCoupled: "",
+          coupleGroupId: "",
+          depSymbol: "circle",
+          arrSymbol: "none",
+          depTimePos: "auto",
+          arrTimePos: "auto",
+          stepRows: 2
+        });
+      }
+      rosters.push({
+        id: rName,
+        name: rName,
+        customName: false,
+        pageBreakAfter: false,
+        trains
+      });
+    }
+
+    const layoutPreset = options.layoutPreset || "station_a4_portrait";
+    const settings = {
+      pageSize: "A4",
+      orientation: layoutPreset === "station_a4_landscape" ? "landscape" : "portrait",
+      xAxisMode: layoutPreset === "time_auto" ? "time" : "station",
+      separatePageSettingsByAxisMode: true,
+      timeAxisPageSize: "AUTO",
+      timeAxisOrientation: "landscape",
+      pageBreakMode: "auto",
+      baseRowHeight: 12.96,
+      rosterStepRows: 2,
+      partialConnectStepRows: 1,
+      blockPaddingRows: 2,
+      stationHeaderDirection: "vertical",
+      stationAxisDirection: "ltr",
+      subHeaderMode: "omitFirst",
+      selfHighlightStyle: "red",
+      showLegend: false,
+      symbolScale: 1.0,
+      symbolFill: "preset",
+      autoSyncCoupled: true
+    };
+
+    return {
+      version: "2.0",
+      metadata: {
+        title,
+        copyright,
+        updatedAt: new Date().toISOString().split("T")[0]
+      },
+      settings,
+      stations,
+      trainTypes,
+      rosters,
+      notes: []
+    };
+  }
+
   // 初期化（プリセットまたは保存データからロード）
   load(initialData) {
     this.data = this.normalizeData(JSON.parse(JSON.stringify(initialData)));

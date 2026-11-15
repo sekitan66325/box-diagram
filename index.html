@@ -53,10 +53,15 @@
       </div>
 
       <div class="header-actions">
-        <!-- プリセット選択 -->
-        <select id="presetSelect" class="form-select preset-select-control" style="font-weight: 500;">
-          <option value="sakuragawa_main">桜川電鉄 1日通しダイヤ（始発〜深夜・全機能サンプル）</option>
-          <option value="midorikawa_compact">緑川鉄道 支線（B5横・コンパクトサンプル）</option>
+        <!-- 新規作成 & 見本（サンプル）選択 -->
+        <button type="button" id="btnNewDiagram" class="btn btn-sm btn-primary-outline" title="見本を消して、自分の路線名・駅から新しく箱ダイヤを作成します">
+          ＋ 新規作成
+        </button>
+
+        <select id="presetSelect" class="form-select preset-select-control" title="見本（サンプル）ダイヤへ切り替えます" style="font-weight: 500;">
+          <option id="optPresetCustom" value="__custom__" hidden>作成中データ</option>
+          <option value="sakuragawa_main" selected>見本: 桜川電鉄 1日通しダイヤ（全機能サンプル）</option>
+          <option value="midorikawa_compact">見本: 緑川鉄道 シャトル運用（B5横サンプル）</option>
         </select>
 
         <!-- 元に戻す / やり直し -->
@@ -175,6 +180,18 @@
           </div>
         </div>
 
+        <div id="welcomeSampleBar" class="welcome-sample-bar">
+          <div class="welcome-sample-msg">
+            <span class="welcome-sample-badge">見本表示中</span>
+            <span>この画面はサンプルデータです。上部の <strong>＋ 新規作成</strong> から自分の路線を一から作れるほか、<code>.oud/.oud2</code> や <code>JSON</code> の読込、左側の表の直接編集も試せます。</span>
+          </div>
+          <div class="welcome-sample-actions">
+            <button type="button" id="btnWelcomeNewDiagram" class="btn btn-xs btn-primary">＋ 新規作成</button>
+            <button type="button" id="btnWelcomeOpenFile" class="btn btn-xs btn-secondary">読込 (JSON/.oud)</button>
+            <button type="button" id="btnDismissWelcomeBar" class="btn btn-xs btn-secondary" title="この案内を閉じる">閉じる</button>
+          </div>
+        </div>
+
         <div id="layoutSuggestionBar" class="layout-suggestion-bar" hidden></div>
 
         <!-- プレビュー用紙描画エリア -->
@@ -211,8 +228,8 @@
             <div class="help-step">
               <span class="step-badge">1</span>
               <div>
-                <strong>サンプルを選ぶ・データを開く</strong>
-                <p>上部のプルダウンからサンプルデータ（桜川電鉄 本線 / 特急・回送・試運転 / 緑川鉄道 支線）を選ぶか、<code>読込 (JSON)</code> から保存済みデータを読み込みます。</p>
+                <strong>新規作成・見本を見る・データを開く</strong>
+                <p>上部の <code>＋ 新規作成</code> から自分の路線名・駅を設定して一から作れます。動作を試したいときは見本プリセットを選び、既存データは <code>読込 (JSON/.oud)</code> から取り込めます。</p>
               </div>
             </div>
             <div class="help-step">
@@ -497,6 +514,83 @@
         <div class="modal-footer-actions">
           <button type="button" id="btnCancelOudImport" class="btn btn-sm btn-secondary">キャンセル</button>
           <button type="button" id="btnExecuteOudImport" class="btn btn-sm btn-primary">インポート実行</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新規ダイヤ作成 ミニ設定モーダル -->
+  <div id="newDiagramModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog new-diagram-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="newDiagramModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="newDiagramModalTitle" class="modal-title">新規ダイヤ作成</h2>
+          <p class="modal-subtitle">路線名と初期の駅・運用を設定して、一から新しい箱ダイヤの作成を始めます。</p>
+        </div>
+        <button id="btnCloseNewDiagram" type="button" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="新規ダイヤ作成を閉じる">✕</button>
+      </div>
+
+      <div class="modal-body new-diagram-modal-body">
+        <div class="new-form-grid">
+          <div class="oud-field">
+            <label for="inputNewTitle" class="oud-field-label">路線名 / 図面タイトル</label>
+            <input type="text" id="inputNewTitle" class="form-control" value="新規路線 車両運用図" placeholder="例: ○○電鉄 本線 車両運用図" />
+          </div>
+          <div class="oud-field">
+            <label for="inputNewCopyright" class="oud-field-label">作成者 / コピーライト表記（任意）</label>
+            <input type="text" id="inputNewCopyright" class="form-control" value="" placeholder="例: (C) 2026 ..." />
+          </div>
+        </div>
+
+        <div class="new-stations-section">
+          <div class="oud-stations-header">
+            <span class="oud-field-label">初期の駅設定（図面の左から順・2駅以上）</span>
+            <button type="button" id="btnAddNewStation" class="btn btn-xs btn-secondary">＋ 駅を追加</button>
+          </div>
+          <p class="oud-stations-hint">略称を空欄にすると駅名の先頭1文字を自動使用します（作成後に「駅マスタ」で増減・並替できます）。</p>
+          <div id="newStationsList" class="new-stations-list"></div>
+        </div>
+
+        <div class="new-form-options-grid">
+          <div class="oud-field">
+            <label for="selectNewRosterCount" class="oud-field-label">最初に作る運用</label>
+            <select id="selectNewRosterCount" class="form-select">
+              <option value="1" selected>1運用のみ作成（A1）</option>
+              <option value="2">2運用を作成（A1・A2）</option>
+              <option value="3">3運用を作成（A1〜A3）</option>
+              <option value="0">運用は作らない（後で追加）</option>
+            </select>
+          </div>
+          <div class="oud-field">
+            <label for="selectNewLayout" class="oud-field-label">初期レイアウト</label>
+            <select id="selectNewLayout" class="form-select">
+              <option value="station_a4_portrait" selected>駅軸・A4 縦（標準箱ダイヤ）</option>
+              <option value="station_a4_landscape">駅軸・A4 横</option>
+              <option value="time_auto">時刻軸・変形（自動フィット）</option>
+            </select>
+          </div>
+          <div class="oud-field">
+            <label for="selectNewTypes" class="oud-field-label">列車種別テンプレート</label>
+            <select id="selectNewTypes" class="form-select">
+              <option value="standard" selected>標準（普通・快速・急行・回送など）</option>
+              <option value="simple">シンプル（普通・快速・回送のみ）</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="checkbox-simple" style="margin-top: 2px;">
+          <input type="checkbox" id="checkNewStarterTrain" />
+          <span>書き始めの目安として、A1に仮の1列車目（6:00発）を1本だけ入れて開始する</span>
+        </label>
+      </div>
+
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">
+          ※ 作成後も「駅マスタ」「種別マスタ」「基本設定」からすべての設定を変更できます。
+        </span>
+        <div class="modal-footer-actions">
+          <button type="button" id="btnCancelNewDiagram" class="btn btn-sm btn-secondary">キャンセル</button>
+          <button type="button" id="btnExecuteNewDiagram" class="btn btn-sm btn-primary">この設定で作成開始</button>
         </div>
       </div>
     </div>
