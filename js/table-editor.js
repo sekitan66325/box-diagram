@@ -964,7 +964,7 @@ class BoxDiagramTableEditor {
             <label class="form-label">著作権・作成者（公開時クレジット記載欄としても使えます）:</label>
             <div class="inline-input-with-btn">
               <input type="text" class="form-control" id="inputMetaCopyright" value="${this.escapeXml(meta.copyright || '')}" placeholder="例: (C) 2026 作成者名" ${!showHeaderCopyright ? 'disabled' : ''} />
-              <button type="button" id="btnAppendCredit" class="btn btn-xs btn-secondary" title="利用規約に沿った制作クレジット表記を末尾に追記します">＋ 本ソフト名を追記</button>
+              <button type="button" id="btnAppendCredit" class="btn btn-xs btn-secondary" title="利用規約に沿った公開用URLクレジット表記を末尾に追記します">＋ クレジットを追記</button>
             </div>
           </div>
 
@@ -1878,7 +1878,7 @@ class BoxDiagramTableEditor {
       const btnAppendCredit = this.container.querySelector("#btnAppendCredit");
       if (btnAppendCredit && metaCopy) {
         btnAppendCredit.addEventListener("click", () => {
-          const creditTag = "箱ダイヤ描画システムで作成";
+          const creditTag = "sekitan66325.github.io/box-diagram で作成";
           const cur = (metaCopy.value || "").trim();
           const next = cur.includes(creditTag)
             ? cur

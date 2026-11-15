@@ -1831,7 +1831,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnCopyTermsCredit) {
     btnCopyTermsCredit.addEventListener("click", () => {
-      const text = "箱ダイヤ描画システム (https://sekitan66325.github.io/box-diagram/) で作成";
+      const text = "https://sekitan66325.github.io/box-diagram/ で作成";
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         navigator.clipboard.writeText(text).then(() => {
           showAppToast("クレジット表記例をコピーしました");
