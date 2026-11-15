@@ -1667,10 +1667,6 @@ html, body {
    印刷スタイル (@media print) - 1:1 ベクターPDF出力
    ========================================================================== */
 @media print {
-  @page {
-    margin: 0;
-  }
-
   html, body {
     width: 100% !important;
     height: 100% !important;
@@ -1716,6 +1712,7 @@ html, body {
     break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+    overflow: hidden !important;
   }
 
   .preview-page-wrapper:last-child {
@@ -1733,6 +1730,7 @@ html, body {
     width: 100vw !important;
     height: 100vh !important;
     max-height: 99.4vh !important;
+    overflow: hidden !important;
     display: block !important;
   }
 

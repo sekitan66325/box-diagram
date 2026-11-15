@@ -111,13 +111,27 @@ document.addEventListener("DOMContentLoaded", () => {
     btnRedo.disabled = !dataModel.canRedo();
   }
 
+  let lastEffectivePrintCfg = null;
+  let wasAllPagesBeforePrint = null;
+
   function updatePrintPageStyle(data, effectiveCfgArg = null) {
-    const cfg = effectiveCfgArg || BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
+    const rawCfg = BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
+    if (effectiveCfgArg) {
+      lastEffectivePrintCfg = effectiveCfgArg;
+    }
+    const cfg = effectiveCfgArg
+      || (rawCfg.isAutoPageSize && lastEffectivePrintCfg && lastEffectivePrintCfg.isAutoPageSize ? lastEffectivePrintCfg : rawCfg);
     if (dynamicPrintStyle) {
       dynamicPrintStyle.textContent = `
         @page {
           size: ${cfg.cssPageSize};
           margin: 0;
+        }
+        @media print {
+          @page {
+            size: ${cfg.cssPageSize};
+            margin: 0;
+          }
         }
       `;
     }
@@ -1126,22 +1140,41 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function syncBeforePrintState() {
+    if (checkShowAllPages && !checkShowAllPages.checked) {
+      if (wasAllPagesBeforePrint === null) {
+        wasAllPagesBeforePrint = false;
+      }
+      checkShowAllPages.checked = true;
+      renderPreview();
+    } else {
+      updatePrintPageStyle(dataModel.getData(), lastEffectivePrintCfg);
+    }
+    void document.documentElement.offsetHeight;
+  }
+
+  function restoreAfterPrintState() {
+    if (wasAllPagesBeforePrint === false && checkShowAllPages) {
+      wasAllPagesBeforePrint = null;
+      checkShowAllPages.checked = false;
+      renderPreview();
+    } else {
+      wasAllPagesBeforePrint = null;
+    }
+  }
+
+  window.addEventListener("beforeprint", syncBeforePrintState);
+  window.addEventListener("afterprint", restoreAfterPrintState);
+
   // 印刷 / PDF出力
   btnPrint.addEventListener("click", () => {
     preparePrintAndTrigger();
   });
 
   function preparePrintAndTrigger() {
-    const prevShowAll = checkShowAllPages.checked;
-    if (!prevShowAll) {
-      checkShowAllPages.checked = true;
-      renderPreview();
-    }
+    syncBeforePrintState();
     window.print();
-    if (!prevShowAll) {
-      checkShowAllPages.checked = false;
-      renderPreview();
-    }
+    restoreAfterPrintState();
   }
 
   // 横軸モード / クイック用紙コントロール

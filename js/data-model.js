@@ -22,11 +22,11 @@ class BoxDiagramDataModel {
     return {
       AUTO: { label: "変形 (自動フィット)", isAuto: true, baseW: 1123, baseH: 794, canvasScale: 1.0, widthMm: 297, heightMm: 210, mmPortrait: "210mm 297mm", mmLandscape: "297mm 210mm" },
       CUSTOM: { label: "変形 (手動サイズ指定 mm)", isCustom: true, baseW: 1587, baseH: 832, canvasScale: 1.0, widthMm: 220, heightMm: 420, mmPortrait: "220mm 420mm", mmLandscape: "420mm 220mm" },
-      A3: { label: "A3 (297 × 420 mm)", baseW: 1123, baseH: 1587, canvasScale: 1.414, widthMm: 297, heightMm: 420, mmPortrait: "297mm 420mm", mmLandscape: "420mm 297mm" },
-      B4: { label: "B4 (257 × 364 mm)", baseW: 971, baseH: 1374, canvasScale: 1.224, widthMm: 257, heightMm: 364, mmPortrait: "257mm 364mm", mmLandscape: "364mm 257mm" },
+      A3: { label: "A3 (297 × 420 mm)", baseW: 1123, baseH: 1587, canvasScale: 1.414, widthMm: 297, heightMm: 420, mmPortrait: "A3 portrait", mmLandscape: "A3 landscape" },
+      B4: { label: "B4 (257 × 364 mm)", baseW: 971, baseH: 1374, canvasScale: 1.224, widthMm: 257, heightMm: 364, mmPortrait: "JIS-B4 portrait", mmLandscape: "JIS-B4 landscape" },
       A4: { label: "A4 (210 × 297 mm)", baseW: 794, baseH: 1123, canvasScale: 1.0, widthMm: 210, heightMm: 297, mmPortrait: "A4 portrait", mmLandscape: "A4 landscape" },
-      B5: { label: "B5 (182 × 257 mm)", baseW: 688, baseH: 971, canvasScale: 1.0, widthMm: 182, heightMm: 257, mmPortrait: "182mm 257mm", mmLandscape: "257mm 182mm" },
-      A5: { label: "A5 (148 × 210 mm)", baseW: 559, baseH: 794, canvasScale: 0.78, widthMm: 148, heightMm: 210, mmPortrait: "148mm 210mm", mmLandscape: "210mm 148mm" },
+      B5: { label: "B5 (182 × 257 mm)", baseW: 688, baseH: 971, canvasScale: 1.0, widthMm: 182, heightMm: 257, mmPortrait: "JIS-B5 portrait", mmLandscape: "JIS-B5 landscape" },
+      A5: { label: "A5 (148 × 210 mm)", baseW: 559, baseH: 794, canvasScale: 0.78, widthMm: 148, heightMm: 210, mmPortrait: "A5 portrait", mmLandscape: "A5 landscape" },
       B6: { label: "B6 (128 × 182 mm)", baseW: 484, baseH: 688, canvasScale: 0.72, widthMm: 128, heightMm: 182, mmPortrait: "128mm 182mm", mmLandscape: "182mm 128mm" }
     };
   }

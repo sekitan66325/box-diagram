@@ -286,6 +286,7 @@ class OudParser {
     const allTrains = kudari.concat(nobori);
     const hasOperationNumbers = allTrains.some(tr => Object.keys(tr.operationNumbers).length > 0);
     const hasLegacyOperations = allTrains.some(tr => Object.keys(tr.operations).length > 0);
+    const hasLegacyOpSeeds = allTrains.some(tr => this._extractLegacySeedOpsFromTrain(tr).length > 0);
 
     return {
       index: idx,
@@ -294,7 +295,8 @@ class OudParser {
       nobori,
       operationTables,
       hasOperationNumbers,
-      hasLegacyOperations
+      hasLegacyOperations,
+      hasLegacyOpSeeds
     };
   }
 
@@ -537,10 +539,16 @@ class OudParser {
     } else if (dia.hasOperationNumbers && parsedDoc.enableOperation) {
       stats.operationSource = "OperationNumber (運用番号抽出)";
       rosters = this._buildRostersFromOperationNumbers(context);
+    } else if (dia.hasLegacyOperations && dia.hasLegacyOpSeeds && parsedDoc.enableOperation) {
+      stats.operationSource = "Operation作業タグ (前/後作業チェーン自動復元)";
+      rosters = this._buildRostersFromLegacyOperations(context);
     } else {
-      stats.operationSource = fallbackMode === "single"
-        ? "運用データなし (未割当仮運用)"
-        : "運用データなし (下り/上り仮運用)";
+      stats.operationSource = (dia.hasLegacyOperations && parsedDoc.enableOperation)
+        ? "運用作業タグのみ・運用番号未記載 (下り/上り仮運用)"
+        : (fallbackMode === "single" ? "運用データなし (未割当仮運用)" : "運用データなし (下り/上り仮運用)");
+      if (dia.hasLegacyOperations && parsedDoc.enableOperation && !dia.hasLegacyOpSeeds) {
+        addWarning("選択されたダイヤには運用番号の起点（出区・運用指定）が含まれていないため仮運用に分類しました。");
+      }
       rosters = this._buildRostersFallback(context);
     }
 
@@ -950,6 +958,436 @@ class OudParser {
   }
 
   /**
+   * 列車オブジェクト内の Operation[order][B|A] から明示的な運用番号シードを抽出する
+   */
+  static _extractLegacySeedOpsFromTrain(res) {
+    const found = [];
+    const opsMap = (res && res.operations) || {};
+    for (const sideObj of Object.values(opsMap)) {
+      if (!sideObj) continue;
+      for (const side of ["B", "A"]) {
+        if (!sideObj[side]) continue;
+        const parsed = this._parseOperationTag(sideObj[side], side);
+        if (parsed && parsed.ops.length > 0) {
+          parsed.ops.forEach(op => found.push(op));
+        }
+      }
+    }
+    return found;
+  }
+
+  /**
+   * Operation<order>[B|A] タグ文字列を解析する
+   * 例:
+   *   B: "3/522$/A1", "3/512$/A12;A2", "5/$", "5/$A601", "6/A1", "6/"
+   *   A: "3/1133$", "5/$0", "5/$3"
+   */
+  static _parseOperationTag(rawVal, side) {
+    const raw = String(rawVal || "").trim();
+    if (!raw) return null;
+
+    const m = raw.match(/^(\d+)\/(.*)$/);
+    if (!m) return null;
+
+    const code = m[1];
+    const rest = m[2];
+    const dollarIdx = rest.indexOf("$");
+    const afterDollar = dollarIdx >= 0 ? rest.slice(dollarIdx + 1) : rest;
+
+    const splitOps = (str) => String(str || "")
+      .replace(/^\/+/, "")
+      .split(";")
+      .map(s => s.trim())
+      .filter(Boolean);
+
+    if (code === "3" || code === "33") {
+      let opStr = "";
+      if (dollarIdx >= 0) {
+        opStr = afterDollar.startsWith("/") ? afterDollar.slice(1) : "";
+      } else {
+        const slashIdx = rest.indexOf("/");
+        if (slashIdx >= 0) opStr = rest.slice(slashIdx + 1);
+      }
+      return {
+        raw,
+        code,
+        isDepotOut: side === "B",
+        isDepotIn: side === "A",
+        isConnect: false,
+        isOpChange: false,
+        isReverse: false,
+        isOuter: false,
+        connectType: null,
+        ops: side === "B" ? splitOps(opStr) : []
+      };
+    }
+
+    if (code === "5" || code === "55") {
+      const body = (dollarIdx >= 0 ? afterDollar : rest).trim();
+      if (side === "A") {
+        const slashIdx = body.indexOf("/");
+        const flagPart = slashIdx >= 0 ? body.slice(0, slashIdx) : body;
+        const connectType = /^\d+$/.test(flagPart) ? parseInt(flagPart, 10) : 0;
+        return {
+          raw,
+          code,
+          isDepotOut: false,
+          isDepotIn: false,
+          isConnect: true,
+          isOpChange: false,
+          isReverse: false,
+          isOuter: false,
+          connectType,
+          ops: slashIdx >= 0 ? splitOps(body.slice(slashIdx + 1)) : []
+        };
+      }
+      // 前作業 "5/$0/A1" 形式が来た場合は先頭フラグ "0/" を除いて運用番号を取得
+      const cleanedB = /^[0-3]\//.test(body) ? body.slice(2) : body;
+      return {
+        raw,
+        code,
+        isDepotOut: false,
+        isDepotIn: false,
+        isConnect: true,
+        isOpChange: false,
+        isReverse: false,
+        isOuter: false,
+        connectType: null,
+        ops: splitOps(cleanedB)
+      };
+    }
+
+    if (code === "6" || code === "66") {
+      const body = (dollarIdx >= 0 ? afterDollar : rest).trim();
+      const ops = splitOps(body);
+      return {
+        raw,
+        code,
+        isDepotOut: false,
+        isDepotIn: false,
+        isConnect: false,
+        isOpChange: true,
+        isReverse: ops.length === 0,
+        isOuter: false,
+        connectType: null,
+        ops
+      };
+    }
+
+    if (code === "4" || code === "44") {
+      const lastSlash = afterDollar.lastIndexOf("/");
+      const ops = lastSlash >= 0 ? splitOps(afterDollar.slice(lastSlash + 1)) : [];
+      return {
+        raw,
+        code,
+        isDepotOut: false,
+        isDepotIn: false,
+        isConnect: false,
+        isOpChange: false,
+        isReverse: false,
+        isOuter: true,
+        connectType: null,
+        ops: side === "B" ? ops : []
+      };
+    }
+
+    return {
+      raw,
+      code,
+      isDepotOut: false,
+      isDepotIn: false,
+      isConnect: false,
+      isOpChange: false,
+      isReverse: false,
+      isOuter: false,
+      connectType: null,
+      ops: (side === "B" && dollarIdx >= 0 && afterDollar.includes("/"))
+        ? splitOps(afterDollar.slice(afterDollar.lastIndexOf("/") + 1))
+        : []
+    };
+  }
+
+  /**
+   * 起点時刻基準の絶対秒数 (ソートおよび高精度な折り返し判定用)
+   */
+  static _parseRawSeconds(rawTime, kitenMinutes = 240) {
+    const s = String(rawTime || "").trim();
+    if (!s) return null;
+    let h = 0;
+    let m = 0;
+    let sec = 0;
+    const colonMatch = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if (colonMatch) {
+      h = parseInt(colonMatch[1], 10);
+      m = parseInt(colonMatch[2], 10);
+      sec = colonMatch[3] ? parseInt(colonMatch[3], 10) : 0;
+    } else if (/^\d{3,6}$/.test(s)) {
+      const padded = s.length <= 4 ? s.padStart(4, "0") : s.padStart(6, "0");
+      h = parseInt(padded.slice(0, 2), 10);
+      m = parseInt(padded.slice(2, 4), 10);
+      sec = s.length > 4 ? parseInt(padded.slice(4, 6), 10) : 0;
+    } else {
+      return null;
+    }
+    if (Number.isNaN(h) || Number.isNaN(m) || Number.isNaN(sec)) return null;
+    const kitenSec = (kitenMinutes || 240) * 60;
+    let totalSec = h * 3600 + m * 60 + sec;
+    if (totalSec < kitenSec) totalSec += 86400;
+    return totalSec;
+  }
+
+  /**
+   * Mode 2.5: Operation<駅順>[B|A] タグ（OuDiaSecond Ver1.x〜1.17形式）から運用チェーンを復元
+   */
+  static _buildRostersFromLegacyOperations(ctx) {
+    const { parsedDoc, dia, excludeCanceled, secondMode, propertySameStepRows, stats, addWarning } = ctx;
+    const stations = parsedDoc.stations;
+    const trainTypes = parsedDoc.trainTypes;
+    const kitenMin = parsedDoc.kitenMinutes;
+
+    const getOrderTag = (res, order, side) => {
+      const sideObj = res.operations && res.operations[order];
+      if (!sideObj || !sideObj[side]) return null;
+      return this._parseOperationTag(sideObj[side], side);
+    };
+
+    const rawLegs = [];
+    const buildTrainSegments = (res) => {
+      if (excludeCanceled && res.isCanceled) {
+        stats.canceledSkippedCount++;
+        return;
+      }
+      const bounds = this._getTrainTimedBounds(res, secondMode);
+      if (bounds.firstOrder === -1 || bounds.lastOrder === -1 || bounds.firstOrder === bounds.lastOrder) {
+        if (bounds.firstOrder !== -1 || res.trainNo) stats.omittedTrainCount++;
+        return;
+      }
+
+      // 途中駅で明示的 B タグや運用番号変更 (6/ 等) があればセグメント分割
+      const splitOrders = [bounds.firstOrder];
+      for (let o = bounds.firstOrder + 1; o < bounds.lastOrder; o++) {
+        const midB = getOrderTag(res, o, "B");
+        if (midB && (midB.ops.length > 0 || midB.isReverse || midB.isDepotOut)) {
+          splitOrders.push(o);
+        }
+      }
+      splitOrders.push(bounds.lastOrder);
+
+      for (let i = 0; i < splitOrders.length - 1; i++) {
+        const sO = splitOrders[i];
+        const eO = splitOrders[i + 1];
+        const legTimes = this._extractLegEndpoints(res, bounds.parsedEntries, sO, eO, stations, stats);
+        if (!legTimes) continue;
+
+        let bTag = getOrderTag(res, legTimes.startOrder, "B") || getOrderTag(res, sO, "B");
+        if (!bTag && i === 0) {
+          for (let scanO = 0; scanO <= legTimes.startOrder; scanO++) {
+            const cand = getOrderTag(res, scanO, "B");
+            if (cand && (cand.ops.length > 0 || cand.isDepotOut || cand.isConnect)) {
+              bTag = cand;
+              break;
+            }
+          }
+        }
+        let aTag = getOrderTag(res, legTimes.endOrder, "A") || getOrderTag(res, eO, "A");
+        if (!aTag && i === splitOrders.length - 2) {
+          for (let scanO = stations.length - 1; scanO >= legTimes.endOrder; scanO--) {
+            const cand = getOrderTag(res, scanO, "A");
+            if (cand && (cand.isDepotIn || cand.isConnect || cand.isOuter)) {
+              aTag = cand;
+              break;
+            }
+          }
+        }
+
+        const startEntry = res.stationEntries[legTimes.startOrder] || {};
+        const endEntry = res.stationEntries[legTimes.endOrder] || {};
+        const depRaw = startEntry.depRaw || startEntry.arrRaw;
+        const arrRaw = endEntry.arrRaw || endEntry.depRaw;
+        const turnDepRaw = (endEntry.arrRaw && endEntry.depRaw) ? endEntry.depRaw : "";
+
+        const depSec = this._parseRawSeconds(depRaw, kitenMin) ?? ((legTimes.depObj.totalMinutes < kitenMin ? legTimes.depObj.totalMinutes + 1440 : legTimes.depObj.totalMinutes) * 60);
+        const arrSec = this._parseRawSeconds(arrRaw, kitenMin) ?? ((legTimes.arrObj.totalMinutes < kitenMin ? legTimes.arrObj.totalMinutes + 1440 : legTimes.arrObj.totalMinutes) * 60);
+        const turnDepSec = turnDepRaw ? this._parseRawSeconds(turnDepRaw, kitenMin) : null;
+
+        const seedOps = (bTag && bTag.ops.length > 0) ? [...new Set(bTag.ops)] : null;
+        const isConnectB = !!(bTag && (bTag.isConnect || bTag.isOpChange));
+        const isReverseB = !!(bTag && bTag.isReverse);
+        const canContinueAfter = !!(aTag ? (aTag.isConnect && !aTag.isDepotIn && !aTag.isOuter) : (turnDepSec !== null));
+
+        rawLegs.push({
+          res,
+          legTimes,
+          isIntraTrainContinuation: i > 0,
+          intraTrainPrev: i > 0 ? rawLegs[rawLegs.length - 1] : null,
+          depSec,
+          arrSec,
+          turnDepSec,
+          depTrack: startEntry.track || "",
+          arrTrack: endEntry.track || "",
+          bTag,
+          aTag,
+          seedOps,
+          isConnectB,
+          isReverseB,
+          canReceiveBefore: !seedOps && (isConnectB || isReverseB || i > 0),
+          canContinueAfter,
+          sortMin: this._sortMinutes(legTimes.depObj || legTimes.arrObj, kitenMin),
+          trainKey: `${res.direction}:${res.index}:${i}`
+        });
+      }
+    };
+
+    dia.kudari.forEach(buildTrainSegments);
+    dia.nobori.forEach(buildTrainSegments);
+
+    const sortedLegs = rawLegs.slice().sort((a, b) => a.depSec - b.depSec || a.arrSec - b.arrSec);
+    const opsOf = new Map();
+    const prevLinkOf = new Map();
+    const consumedArrivals = new Set();
+
+    for (const leg of sortedLegs) {
+      if (leg.seedOps && leg.seedOps.length > 0) {
+        opsOf.set(leg, leg.seedOps);
+      }
+    }
+
+    const arrivalsByStation = new Map();
+    for (const leg of sortedLegs) {
+      if (!leg.canContinueAfter) continue;
+      const stId = leg.legTimes.toStation;
+      if (!arrivalsByStation.has(stId)) arrivalsByStation.set(stId, []);
+      arrivalsByStation.get(stId).push(leg);
+    }
+
+    const pickBestArrival = (candList, leg, preferOps = null) => {
+      if (candList.length === 0) return null;
+      const exactTurn = candList.find(a => a.turnDepSec !== null && a.turnDepSec === leg.depSec);
+      if (exactTurn) return exactTurn;
+      if (preferOps) {
+        const sameOps = [...candList].reverse().find(a => {
+          const aOps = opsOf.get(a);
+          return aOps && aOps.join(";") === preferOps.join(";");
+        });
+        if (sameOps) return sameOps;
+      }
+      const sameTrackType = candList.filter(a =>
+        leg.depTrack && a.arrTrack === leg.depTrack && a.res.syubetsuIndex === leg.res.syubetsuIndex
+      );
+      if (sameTrackType.length > 0) return sameTrackType[sameTrackType.length - 1];
+      const sameType = candList.filter(a => a.res.syubetsuIndex === leg.res.syubetsuIndex);
+      if (sameType.length > 0) return sameType[sameType.length - 1];
+      return candList[candList.length - 1];
+    };
+
+    // 先行パス: 5/$A601 等の明示継続ラベルの到着元を先に引き当てて、後続の無記名列車に奪われないようにする
+    for (const leg of sortedLegs) {
+      if (!leg.seedOps || !leg.isConnectB) continue;
+      const pool = (arrivalsByStation.get(leg.legTimes.fromStation) || [])
+        .filter(a => !consumedArrivals.has(a) && a.arrSec <= leg.depSec);
+      const match = pickBestArrival(pool, leg, leg.seedOps);
+      if (match) {
+        consumedArrivals.add(match);
+        prevLinkOf.set(leg, match);
+      }
+    }
+
+    // 時系列順の折り返し連鎖伝播 (LIFO: 最短折り返し優先)
+    for (const leg of sortedLegs) {
+      if (opsOf.has(leg)) continue;
+      if (leg.isIntraTrainContinuation && leg.intraTrainPrev && opsOf.has(leg.intraTrainPrev)) {
+        const baseOps = opsOf.get(leg.intraTrainPrev);
+        opsOf.set(leg, leg.isReverseB ? baseOps.slice().reverse() : baseOps.slice());
+        prevLinkOf.set(leg, leg.intraTrainPrev);
+        continue;
+      }
+      if (!leg.canReceiveBefore) continue;
+
+      const pool = (arrivalsByStation.get(leg.legTimes.fromStation) || [])
+        .filter(a => !consumedArrivals.has(a) && a.arrSec <= leg.depSec && opsOf.has(a));
+      const chosen = pickBestArrival(pool, leg, null);
+      if (chosen) {
+        consumedArrivals.add(chosen);
+        const inherited = opsOf.get(chosen);
+        opsOf.set(leg, leg.isReverseB ? inherited.slice().reverse() : inherited.slice());
+        prevLinkOf.set(leg, chosen);
+      }
+    }
+
+    const legsByRoster = new Map();
+    let unassignedCount = 0;
+
+    for (const leg of sortedLegs) {
+      let resolvedOps = opsOf.get(leg);
+      if (!resolvedOps || resolvedOps.length === 0) {
+        resolvedOps = [leg.res.direction === "Nobori" ? "未割当_上り" : "未割当_下り"];
+        unassignedCount++;
+      }
+      const uniqueOps = [...new Set(resolvedOps)];
+      const usages = uniqueOps.map(op => ({
+        rosterId: op,
+        rawOpNumber: op,
+        sihatsu: leg.legTimes.startOrder,
+        syuuchaku: leg.legTimes.endOrder
+      }));
+
+      const prevLeg = prevLinkOf.get(leg);
+      const isPropertySame = !!(leg.isIntraTrainContinuation || (prevLeg && prevLeg.aTag && prevLeg.aTag.connectType === 3));
+
+      uniqueOps.forEach(opId => {
+        const trainObj = this._createBaseTrainObject(leg.res, leg.legTimes, trainTypes);
+        if (leg.bTag && leg.bTag.isDepotOut) {
+          trainObj.depSymbol = "circle";
+        } else if (leg.isIntraTrainContinuation) {
+          trainObj.depSymbol = "circle_filled";
+        }
+        if (leg.aTag && leg.aTag.isDepotIn) {
+          trainObj.arrSymbol = "triangle";
+        }
+
+        if (uniqueOps.length >= 2) {
+          this._applyCouplingInfo(trainObj, opId, opId, leg.res, leg.legTimes, usages, leg.trainKey);
+        }
+
+        stats.usedEndpointIds.add(trainObj.fromStation);
+        stats.usedEndpointIds.add(trainObj.toStation);
+
+        if (!legsByRoster.has(opId)) legsByRoster.set(opId, []);
+        legsByRoster.get(opId).push({
+          trainObj,
+          sortMin: leg.sortMin,
+          isPropertySame
+        });
+      });
+    }
+
+    if (unassignedCount > 0) {
+      addWarning(`折り返し元が途切れているため運用番号を特定できなかった列車 ${unassignedCount} 本を「未割当」にまとめました。`);
+    }
+
+    const rosters = [];
+    for (const [opId, items] of legsByRoster.entries()) {
+      items.sort((a, b) => a.sortMin - b.sortMin);
+      const trains = items.map((item, idx) => {
+        if (idx > 0 && item.isPropertySame && items[idx - 1].trainObj.toStation === item.trainObj.fromStation) {
+          item.trainObj.stepRows = propertySameStepRows;
+        }
+        return item.trainObj;
+      });
+      rosters.push({
+        id: opId,
+        name: opId,
+        customName: false,
+        pageBreakAfter: false,
+        trains
+      });
+    }
+
+    rosters.sort((a, b) => a.id.localeCompare(b.id, "ja", { numeric: true }));
+    return rosters;
+  }
+
+  /**
    * Mode 3: 運用データなし (.oud / EnableOperation=0) 用の仮運用構築
    */
   static _buildRostersFallback(ctx) {
@@ -1139,10 +1577,10 @@ class OudParser {
   static _applyLegacyOperationSymbols(trainObj, res, startOrder, endOrder) {
     const beforeOp = res.operations[startOrder] ? res.operations[startOrder].B : "";
     const afterOp = res.operations[endOrder] ? res.operations[endOrder].A : "";
-    if (trainObj.depSymbol === "none" && beforeOp && beforeOp.startsWith("33/")) {
+    if (trainObj.depSymbol === "none" && beforeOp && /^(?:3|33)\//.test(beforeOp)) {
       trainObj.depSymbol = "circle";
     }
-    if (trainObj.arrSymbol === "none" && afterOp && afterOp.startsWith("33/")) {
+    if (trainObj.arrSymbol === "none" && afterOp && /^(?:3|33)\//.test(afterOp)) {
       trainObj.arrSymbol = "triangle";
     }
   }
