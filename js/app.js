@@ -32,6 +32,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const splitter = document.getElementById("workspaceSplitter");
   const previewViewport = document.getElementById("previewViewport");
+  const btnAxisStation = document.getElementById("btnAxisStation");
+  const btnAxisTime = document.getElementById("btnAxisTime");
+  const selectQuickPageSize = document.getElementById("selectQuickPageSize");
+  const btnQuickPortrait = document.getElementById("btnQuickPortrait");
+  const btnQuickLandscape = document.getElementById("btnQuickLandscape");
+  const quickPageModeBadge = document.getElementById("quickPageModeBadge");
+  const layoutSuggestionBar = document.getElementById("layoutSuggestionBar");
   const btnPrevPage = document.getElementById("btnPrevPage");
   const btnNextPage = document.getElementById("btnNextPage");
   const pageIndicator = document.getElementById("pageIndicator");
@@ -47,9 +54,13 @@ document.addEventListener("DOMContentLoaded", () => {
   let zoomMode = "fit-width"; // "fit-width" | "fit" | "manual"
   let currentZoom = 1.0;
   let appliedScale = 1.0;
+  const dismissedSuggestionKeys = new Set();
 
   // 3. データ変更リスナー（プレビューの再描画 & Undo/Redo更新）
   dataModel.subscribe((data, actionType) => {
+    if (actionType === "load") {
+      dismissedSuggestionKeys.clear();
+    }
     updateHistoryButtons();
     renderPreview({ resetScroll: actionType === "load" });
     updatePrintPageStyle(data);
@@ -61,17 +72,108 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updatePrintPageStyle(data) {
-    const set = data.settings || {};
-    const size = set.pageSize || "A4";
-    const orientation = set.orientation || "portrait";
+    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
     if (dynamicPrintStyle) {
       dynamicPrintStyle.textContent = `
         @page {
-          size: ${size} ${orientation};
+          size: ${cfg.cssPageSize};
           margin: 0;
         }
       `;
     }
+  }
+
+  function syncPreviewToolbarControls(data) {
+    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
+    if (btnAxisStation) {
+      btnAxisStation.classList.toggle("active", cfg.xAxisMode !== "time");
+      btnAxisStation.setAttribute("aria-pressed", String(cfg.xAxisMode !== "time"));
+    }
+    if (btnAxisTime) {
+      btnAxisTime.classList.toggle("active", cfg.xAxisMode === "time");
+      btnAxisTime.setAttribute("aria-pressed", String(cfg.xAxisMode === "time"));
+    }
+    if (selectQuickPageSize) {
+      selectQuickPageSize.value = cfg.pageSize;
+      selectQuickPageSize.title = (cfg.isSeparateMode && cfg.xAxisMode === "time")
+        ? "時刻軸モード専用の用紙サイズ（別設定中）"
+        : "現在の表示モードに適用する用紙サイズ";
+    }
+    if (btnQuickPortrait) {
+      btnQuickPortrait.classList.toggle("active", !cfg.isLandscape);
+      btnQuickPortrait.setAttribute("aria-pressed", String(!cfg.isLandscape));
+    }
+    if (btnQuickLandscape) {
+      btnQuickLandscape.classList.toggle("active", cfg.isLandscape);
+      btnQuickLandscape.setAttribute("aria-pressed", String(cfg.isLandscape));
+    }
+    if (quickPageModeBadge) {
+      quickPageModeBadge.hidden = !cfg.isSeparateMode;
+    }
+  }
+
+  function updateLayoutSuggestionBar(data, diagnostics) {
+    if (!layoutSuggestionBar) return;
+    const sug = diagnostics && diagnostics.suggestion;
+    if (!sug || dismissedSuggestionKeys.has(sug.key)) {
+      layoutSuggestionBar.hidden = true;
+      layoutSuggestionBar.innerHTML = "";
+      return;
+    }
+
+    layoutSuggestionBar.innerHTML = "";
+
+    const msgEl = document.createElement("div");
+    msgEl.className = "layout-suggestion-msg";
+    const iconSpan = document.createElement("span");
+    iconSpan.textContent = "💡";
+    const textSpan = document.createElement("span");
+    textSpan.textContent = sug.message;
+    msgEl.appendChild(iconSpan);
+    msgEl.appendChild(textSpan);
+
+    const actionsEl = document.createElement("div");
+    actionsEl.className = "layout-suggestion-actions";
+    (sug.actions || []).forEach((act, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = idx === 0 ? "btn btn-xs btn-primary" : "btn btn-xs btn-secondary";
+      btn.dataset.suggestionAction = act.id || String(idx);
+      btn.textContent = act.label;
+      btn.addEventListener("click", () => {
+        dataModel.updateSettings(act.patch || {});
+      });
+      actionsEl.appendChild(btn);
+    });
+
+    const btnDismiss = document.createElement("button");
+    btnDismiss.type = "button";
+    btnDismiss.className = "btn btn-xs btn-secondary";
+    btnDismiss.dataset.suggestionDismiss = sug.key;
+    btnDismiss.textContent = "このまま";
+    btnDismiss.title = "この提案を閉じる";
+    btnDismiss.addEventListener("click", () => {
+      dismissedSuggestionKeys.add(sug.key);
+      updateLayoutSuggestionBar(dataModel.getData(), diagramRenderer.getLastDiagnostics());
+    });
+    actionsEl.appendChild(btnDismiss);
+
+    layoutSuggestionBar.appendChild(msgEl);
+    layoutSuggestionBar.appendChild(actionsEl);
+    layoutSuggestionBar.hidden = false;
+  }
+
+  function applyEffectivePagePatch(patch) {
+    const cfg = BoxDiagramDataModel.getEffectivePageConfig(dataModel.getSettings());
+    const mapped = {};
+    if (cfg.isSeparateMode && cfg.xAxisMode === "time") {
+      if (patch.pageSize) mapped.timeAxisPageSize = patch.pageSize;
+      if (patch.orientation) mapped.timeAxisOrientation = patch.orientation;
+    } else {
+      if (patch.pageSize) mapped.pageSize = patch.pageSize;
+      if (patch.orientation) mapped.orientation = patch.orientation;
+    }
+    dataModel.updateSettings(mapped);
   }
 
   // 4. プレビュー描画処理
@@ -84,6 +186,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const renderedPages = diagramRenderer.renderPages(data);
     totalPageCount = renderedPages.length;
+
+    syncPreviewToolbarControls(data);
+    updateLayoutSuggestionBar(data, diagramRenderer.getLastDiagnostics());
 
     if (currentPageIndex > totalPageCount) {
       currentPageIndex = totalPageCount;
@@ -101,18 +206,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const showAll = checkShowAllPages.checked;
     previewViewport.innerHTML = "";
 
-    // ページごとの用紙寸法計算 (基準: A4 794×1123px, B5 688×971px)
-    const set = data.settings || {};
-    const isLandscape = set.orientation === "landscape";
-    const isB5 = set.pageSize === "B5";
-
-    let baseW = isB5 ? 688 : 794;
-    let baseH = isB5 ? 971 : 1123;
-    if (isLandscape) {
-      const tmp = baseW;
-      baseW = baseH;
-      baseH = tmp;
-    }
+    // ページごとの実効用紙寸法計算 (A3/B4/A4/B5/A5/B6 × 縦/横、モード別設定対応)
+    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data.settings);
+    const baseW = cfg.baseW;
+    const baseH = cfg.baseH;
 
     // ズーム倍率の計算
     const availW = Math.max(200, previewViewport.clientWidth - 48);
@@ -266,18 +363,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const noteObj = notes.find(n => n.id === noteId);
         if (!noteObj) return;
 
-        const MIN_X = 54.24;
-        const MAX_X = 1064.0;
-        const MIN_Y = 48.64;
-        const MAX_Y = 1540.0;
+        const curData = dataModel.getData();
+        const pageGeom = diagramRenderer.getPageGeometry(curData);
+        const vb = (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width > 0)
+          ? svgEl.viewBox.baseVal
+          : { width: pageGeom.W, height: pageGeom.H };
+        const svgW = vb.width || pageGeom.W;
+        const svgH = vb.height || pageGeom.H;
+
+        const MIN_X = pageGeom.tableLeft;
+        const MAX_X = pageGeom.tableRight;
+        const MIN_Y = pageGeom.headerTop;
+        const MAX_Y = Math.max(MIN_Y + 40.0, svgH - 25.0);
 
         const initialRect = svgEl.getBoundingClientRect();
         function clientToSvg(clientX, clientY) {
           const liveRect = svgEl.getBoundingClientRect();
           const r = (liveRect && liveRect.width > 0 && liveRect.height > 0) ? liveRect : initialRect;
           return {
-            x: (clientX - r.left) * (1122.56 / r.width),
-            y: (clientY - r.top) * (1587.36 / r.height)
+            x: (clientX - r.left) * (svgW / r.width),
+            y: (clientY - r.top) * (svgH / r.height)
           };
         }
 
@@ -301,7 +406,17 @@ document.addEventListener("DOMContentLoaded", () => {
         let curY = startY;
 
         const trainLines = getTrainLineGeometries();
-        const stationXs = dataModel.getVisibleStations().map(s => s.x);
+        let stationXs = [];
+        if (pageGeom.xAxisMode === "time") {
+          const tRange = diagramRenderer.computeTimeAxisRange(curData);
+          const spanMin = Math.max(60, tRange.endMin - tRange.startMin);
+          const plotW = Math.max(100, pageGeom.timePlotRight - pageGeom.timePlotLeft);
+          for (let m = tRange.startMin; m <= tRange.endMin; m += 30) {
+            stationXs.push(Math.round((pageGeom.timePlotLeft + ((m - tRange.startMin) / spanMin) * plotW) * 100) / 100);
+          }
+        } else {
+          stationXs = dataModel.getVisibleStations().map(s => diagramRenderer.mapStationXToCanvas(s.x, pageGeom));
+        }
 
         let lastClientX = e.clientX;
         let lastClientY = e.clientY;
@@ -914,6 +1029,39 @@ document.addEventListener("DOMContentLoaded", () => {
       checkShowAllPages.checked = false;
       renderPreview();
     }
+  }
+
+  // 横軸モード / クイック用紙コントロール
+  if (btnAxisStation) {
+    btnAxisStation.addEventListener("click", () => {
+      if (dataModel.getSettings().xAxisMode !== "station") {
+        currentPageIndex = 1;
+        dataModel.updateSettings({ xAxisMode: "station" });
+      }
+    });
+  }
+  if (btnAxisTime) {
+    btnAxisTime.addEventListener("click", () => {
+      if (dataModel.getSettings().xAxisMode !== "time") {
+        currentPageIndex = 1;
+        dataModel.updateSettings({ xAxisMode: "time" });
+      }
+    });
+  }
+  if (selectQuickPageSize) {
+    selectQuickPageSize.addEventListener("change", (e) => {
+      applyEffectivePagePatch({ pageSize: e.target.value });
+    });
+  }
+  if (btnQuickPortrait) {
+    btnQuickPortrait.addEventListener("click", () => {
+      applyEffectivePagePatch({ orientation: "portrait" });
+    });
+  }
+  if (btnQuickLandscape) {
+    btnQuickLandscape.addEventListener("click", () => {
+      applyEffectivePagePatch({ orientation: "landscape" });
+    });
   }
 
   // ページ送りコントロール

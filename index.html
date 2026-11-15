@@ -116,22 +116,43 @@
       <main class="preview-pane" id="previewPane">
         <div class="preview-toolbar">
           <div class="preview-controls-group">
-            <span class="text-muted" style="font-size: 12px; font-weight: 600;">ページ:</span>
+            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">横軸:</span>
+            <div class="segmented-control" role="group" aria-label="横軸モード切替">
+              <button type="button" id="btnAxisStation" class="seg-btn active" title="横軸を駅順にする（標準箱ダイヤ）">駅</button>
+              <button type="button" id="btnAxisTime" class="seg-btn" title="横軸を時刻にする（運用線図／棒ダイヤ）">時刻</button>
+            </div>
+            <select id="selectQuickPageSize" class="form-select preview-quick-size" title="現在の表示モードに適用する用紙サイズ">
+              <option value="A3">A3</option>
+              <option value="B4">B4</option>
+              <option value="A4" selected>A4</option>
+              <option value="B5">B5</option>
+              <option value="A5">A5</option>
+              <option value="B6">B6</option>
+            </select>
+            <div class="segmented-control" role="group" aria-label="用紙の向き切替">
+              <button type="button" id="btnQuickPortrait" class="seg-btn active" title="用紙を縦向きにする">縦</button>
+              <button type="button" id="btnQuickLandscape" class="seg-btn" title="用紙を横向きにする">横</button>
+            </div>
+            <span id="quickPageModeBadge" class="quick-separate-badge" title="駅軸と時刻軸で別の用紙設定を使用中" hidden>別設定</span>
+          </div>
+
+          <div class="preview-controls-group">
+            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ページ:</span>
             <button id="btnPrevPage" class="btn btn-xs btn-secondary" disabled>◀ 前へ</button>
-            <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 50px; text-align: center;">1 / 1</span>
+            <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 44px; text-align: center;">1 / 1</span>
             <button id="btnNextPage" class="btn btn-xs btn-secondary" disabled>次へ ▶</button>
-            <label class="checkbox-simple" style="margin-left: 8px;">
+            <label class="checkbox-simple" style="margin-left: 4px;">
               <input type="checkbox" id="checkShowAllPages" checked />
-              <span>全ページ一覧表示</span>
+              <span>全ページ</span>
             </label>
           </div>
 
           <div class="preview-controls-group">
-            <span class="text-muted" style="font-size: 12px; font-weight: 600;">ズーム:</span>
+            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ズーム:</span>
             <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小 (Ctrl + -)">−</button>
             <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;">
-              <option value="fit-width" selected>横幅フィット (Fit Width)</option>
-              <option value="fit">全体表示 (Fit Page)</option>
+              <option value="fit-width" selected>横幅フィット</option>
+              <option value="fit">全体表示</option>
               <option value="0.5">50%</option>
               <option value="0.75">75%</option>
               <option value="1.0">100%</option>
@@ -141,6 +162,8 @@
             <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大 (Ctrl + +)">＋</button>
           </div>
         </div>
+
+        <div id="layoutSuggestionBar" class="layout-suggestion-bar" hidden></div>
 
         <!-- プレビュー用紙描画エリア -->
         <div class="preview-scroll-viewport" id="previewViewport">
@@ -235,11 +258,11 @@
               </tr>
               <tr>
                 <td><strong>注記</strong></td>
-                <td>図面上に置く自由テキスト（運休注記など）のページ・文言・色・文字サイズ・X/Y座標を管理します。</td>
+                <td>図面上に置く自由テキスト（運休注記など）のページ・配置先（駅軸 / 時刻軸）・文言・色・文字サイズ・X/Y座標を管理します。</td>
               </tr>
               <tr>
                 <td><strong>基本設定</strong></td>
-                <td>図面タイトル・著作権表記、用紙サイズ（A4 / B5）と向き（縦 / 横）、自動／手動改ページ、駅名ヘッダーの向き（縦書き／横書き）、省略駅名行の表示規則、自運用番号の強調スタイル、行高・余白の微調整が行えます。</td>
+                <td>図面タイトル・著作権表記、横軸描画モード（駅 / 時刻）、時間軸の開始時刻・範囲・目盛り・24時以降の表記規則、用紙サイズ（A3/B4/A4/B5/A5/B6）と向き（縦/横・モード別設定可）、改ページやレイアウト細目の微調整が行えます。</td>
               </tr>
               <tr>
                 <td><strong>生JSON</strong></td>
@@ -317,8 +340,9 @@
               <ul class="help-list">
                 <li><strong>動作形式</strong>：HTML / CSS / JavaScript + SVG（外部ライブラリ・バックエンド不要）</li>
                 <li><strong>推奨環境</strong>：Google Chrome / Microsoft Edge / Firefox 等の最新モダンブラウザ（PC画面推奨）</li>
-                <li><strong>内部座標系</strong>：SVG viewBox <code>1122.56 × 1587.36</code>（0.16px グリッド基準・ベクター出力）</li>
-                <li><strong>対応用紙</strong>：A4（縦・横）/ B5（縦・横）</li>
+                <li><strong>内部座標系</strong>：SVG viewBox（A4基準 <code>1122.56 × 1587.36</code>、縦横・大判/小判サイズ対応・ベクター出力）</li>
+                <li><strong>対応用紙</strong>：A3 / B4 / A4 / B5 / A5 / B6（各縦・横、横軸モード別設定対応）</li>
+                <li><strong>時刻入力範囲</strong>：<code>0:00〜27:59</code>（深夜日跨ぎ・起点時刻基準対応）</li>
                 <li><strong>データ形式</strong>：JSON（スキーマ <code>version: "2.0"</code>）</li>
               </ul>
             </div>

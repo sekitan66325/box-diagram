@@ -431,7 +431,7 @@ class OudParser {
   /**
    * OuDia 時刻文字列 (HMM / HHMM / HHMMSS / H:MM) をパースする
    */
-  static parseRawTime(rawTime, secondMode = "truncate") {
+  static parseRawTime(rawTime, secondMode = "truncate", maxHour = 27) {
     const s = String(rawTime || "").trim();
     if (!s) return null;
 
@@ -472,7 +472,7 @@ class OudParser {
     }
 
     const totalMinutes = h * 60 + m;
-    const wrapped = h > 24;
+    const wrapped = h > maxHour;
     const displayH = wrapped ? (h % 24) : h;
     const text = `${displayH}:${String(m).padStart(2, "0")}`;
 
@@ -551,7 +551,7 @@ class OudParser {
       addWarning(`発着時刻が2駅以上揃わない列車 ${stats.omittedTrainCount} 本をスキップしました。`);
     }
     if (stats.wrappedTimeCount > 0) {
-      addWarning(`25時以降の深夜時刻 ${stats.wrappedTimeCount} 件を現行モデル上限（0:00〜24:59）に合わせて翌日時刻表記へ変換しました。`);
+      addWarning(`28時以降の深夜時刻 ${stats.wrappedTimeCount} 件を現行モデル上限（0:00〜27:59）に合わせて翌日時刻表記へ変換しました。`);
     }
     if (rosters.length === 0) {
       addWarning("描画可能な列車データが見つかりませんでした。条件や文字コードを確認してください。");
@@ -599,7 +599,8 @@ class OudParser {
         showLegend: false,
         symbolScale: 1.0,
         symbolFill: "preset",
-        autoSyncCoupled: true
+        autoSyncCoupled: true,
+        timeAxisStartHour: Math.max(0, Math.min(12, Math.floor((parsedDoc.kitenMinutes || 240) / 60)))
       },
       stations,
       trainTypes: JSON.parse(JSON.stringify(parsedDoc.trainTypes)),

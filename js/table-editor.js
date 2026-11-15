@@ -805,10 +805,13 @@ class BoxDiagramTableEditor {
   // ==================== 5. 注記 (Notes Tab) ====================
   renderNotesTab(data) {
     const notes = data.notes || [];
+    const currentAxisMode = (data.settings && data.settings.xAxisMode === "time") ? "time" : "station";
+    const activeModeCount = notes.filter(n => (n.axisMode === "time" ? "time" : "station") === currentAxisMode).length;
+    const modeLabel = currentAxisMode === "time" ? "時刻軸" : "駅軸";
 
     return `
       <div class="tab-toolbar">
-        <span class="section-title-sm">図面自由注記 (全 ${notes.length} 件)</span>
+        <span class="section-title-sm">図面自由注記 (全 ${notes.length} 件 / ${modeLabel}表示中: ${activeModeCount} 件)</span>
         <button id="btnAddNote" class="btn btn-sm btn-primary">＋ 注記追加</button>
       </div>
 
@@ -816,24 +819,34 @@ class BoxDiagramTableEditor {
         <table class="grid-table" id="notesGridTable">
           <thead>
             <tr>
-              <th style="width: 75px;">ページ</th>
-              <th style="width: 190px;">テキスト内容</th>
-              <th style="width: 70px;">X (px)</th>
-              <th style="width: 70px;">Y (px)</th>
-              <th style="width: 110px;">文字色</th>
-              <th style="width: 65px;">サイズ</th>
-              <th style="width: 50px;">操作</th>
+              <th style="width: 72px;">ページ</th>
+              <th style="width: 72px;">モード</th>
+              <th style="width: 155px;">テキスト内容</th>
+              <th style="width: 66px;">X (px)</th>
+              <th style="width: 66px;">Y (px)</th>
+              <th style="width: 106px;">文字色</th>
+              <th style="width: 60px;">サイズ</th>
+              <th style="width: 46px;">操作</th>
             </tr>
           </thead>
           <tbody>
-            ${notes.map(n => `
-              <tr data-note-id="${this.escapeXml(n.id)}">
+            ${notes.map(n => {
+              const noteMode = n.axisMode === "time" ? "time" : "station";
+              const isInactive = noteMode !== currentAxisMode;
+              return `
+              <tr data-note-id="${this.escapeXml(n.id)}" style="${isInactive ? 'opacity: 0.72; background: #f8fafc;' : ''}">
                 <td>
                   <select class="cell-select" data-note-field="page">
                     <option value="1" ${(n.page === 1 || !n.page) ? 'selected' : ''}>1ページ</option>
                     <option value="2" ${n.page === 2 ? 'selected' : ''}>2ページ</option>
                     <option value="3" ${n.page === 3 ? 'selected' : ''}>3ページ</option>
                     <option value="all" ${n.page === 'all' ? 'selected' : ''}>全ページ</option>
+                  </select>
+                </td>
+                <td>
+                  <select class="cell-select" data-note-field="axisMode" title="この注記を表示する横軸モード">
+                    <option value="station" ${noteMode === 'station' ? 'selected' : ''}>駅軸</option>
+                    <option value="time" ${noteMode === 'time' ? 'selected' : ''}>時刻軸</option>
                   </select>
                 </td>
                 <td>
@@ -858,12 +871,13 @@ class BoxDiagramTableEditor {
                   <button class="btn-icon text-danger" data-action="del-note" title="削除">✕</button>
                 </td>
               </tr>
-            `).join("")}
+            `;
+            }).join("")}
           </tbody>
         </table>
       </div>
       <div class="table-footer-info">
-        <span>※ 図面プレビュー上で注記テキストを直接ドラッグして位置を微調整できます（<strong>Altキーを押しながらドラッグで列車線に自動吸着</strong>）。</span>
+        <span>※ 注記は「駅軸」「時刻軸」モードごとに分けて保持・描画されます。プレビュー上で直接ドラッグ（<strong>Altキー押下で列車線に自動吸着</strong>）して位置調整できます。</span>
       </div>
     `;
   }
@@ -872,6 +886,11 @@ class BoxDiagramTableEditor {
   renderSettingsTab(data) {
     const meta = data.metadata || {};
     const set = data.settings || {};
+    const pageSpecs = BoxDiagramDataModel.PAGE_SPECS;
+    const isSeparatePage = !!set.separatePageSettingsByAxisMode;
+    const isManualTimeRange = set.timeAxisRangeMode === "manual";
+    const startHour = typeof set.timeAxisStartHour === "number" ? set.timeAxisStartHour : 4;
+    const endHour = typeof set.timeAxisEndHour === "number" ? set.timeAxisEndHour : 25;
 
     return `
       <div class="form-settings-container">
@@ -891,20 +910,46 @@ class BoxDiagramTableEditor {
           <div class="group-title">用紙・改ページ設定</div>
           <div class="form-row-grid">
             <div class="form-col">
-              <label class="form-label">用紙サイズ:</label>
+              <label class="form-label">${isSeparatePage ? '駅軸の用紙サイズ:' : '用紙サイズ:'}</label>
               <select class="form-select" id="selectPageSize">
-                <option value="A4" ${set.pageSize === 'A4' ? 'selected' : ''}>A4 (210 × 297 mm)</option>
-                <option value="B5" ${set.pageSize === 'B5' ? 'selected' : ''}>B5 (182 × 257 mm)</option>
+                ${Object.entries(pageSpecs).map(([key, spec]) => `
+                  <option value="${key}" ${set.pageSize === key ? 'selected' : ''}>${this.escapeXml(spec.label)}</option>
+                `).join("")}
               </select>
             </div>
             <div class="form-col">
-              <label class="form-label">用紙の向き:</label>
+              <label class="form-label">${isSeparatePage ? '駅軸の用紙の向き:' : '用紙の向き:'}</label>
               <select class="form-select" id="selectOrientation">
                 <option value="portrait" ${set.orientation === 'portrait' ? 'selected' : ''}>縦向き (Portrait)</option>
                 <option value="landscape" ${set.orientation === 'landscape' ? 'selected' : ''}>横向き (Landscape)</option>
               </select>
             </div>
           </div>
+          <div class="form-row" style="margin-top: 10px;">
+            <label class="checkbox-simple">
+              <input type="checkbox" id="checkSeparatePageByAxis" ${isSeparatePage ? 'checked' : ''} />
+              <span>駅軸と時刻軸で別の用紙サイズ・向きを使う（例: 駅軸はA4縦、時刻軸はA4横やA3横）</span>
+            </label>
+          </div>
+          ${isSeparatePage ? `
+            <div class="form-row-grid" style="margin-top: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+              <div class="form-col">
+                <label class="form-label">時刻軸の用紙サイズ:</label>
+                <select class="form-select" id="selectTimeAxisPageSize">
+                  ${Object.entries(pageSpecs).map(([key, spec]) => `
+                    <option value="${key}" ${(set.timeAxisPageSize || set.pageSize) === key ? 'selected' : ''}>${this.escapeXml(spec.label)}</option>
+                  `).join("")}
+                </select>
+              </div>
+              <div class="form-col">
+                <label class="form-label">時刻軸の用紙の向き:</label>
+                <select class="form-select" id="selectTimeAxisOrientation">
+                  <option value="portrait" ${set.timeAxisOrientation === 'portrait' ? 'selected' : ''}>縦向き (Portrait)</option>
+                  <option value="landscape" ${set.timeAxisOrientation !== 'portrait' ? 'selected' : ''}>横向き (Landscape)</option>
+                </select>
+              </div>
+            </div>
+          ` : ''}
           <div class="form-row" style="margin-top: 10px;">
             <label class="form-label">改ページ方式:</label>
             <div class="radio-group-horizontal">
@@ -916,6 +961,67 @@ class BoxDiagramTableEditor {
                 <input type="radio" name="setPageBreakMode" value="manual" ${set.pageBreakMode === 'manual' ? 'checked' : ''} />
                 <span>手動改ページ (運用ごとの改ページ指定に従う)</span>
               </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <div class="group-title">横軸モード・時間軸設定</div>
+          <div class="form-row">
+            <label class="form-label">横軸の表示モード:</label>
+            <select class="form-select" id="selectXAxisMode">
+              <option value="station" ${set.xAxisMode !== 'time' ? 'selected' : ''}>駅順（標準箱ダイヤ）</option>
+              <option value="time" ${set.xAxisMode === 'time' ? 'selected' : ''}>時刻（運用線図／棒ダイヤ）</option>
+            </select>
+          </div>
+          <div class="form-row-grid" style="margin-top: 10px;">
+            <div class="form-col">
+              <label class="form-label">日界（開始時刻）:</label>
+              <select class="form-select" id="selectTimeAxisStartHour">
+                ${[0, 1, 2, 3, 4, 5, 6].map(h => `
+                  <option value="${h}" ${startHour === h ? 'selected' : ''}>${h}:00${h === 4 ? ' (標準)' : ''}</option>
+                `).join("")}
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">時間範囲の決定方法:</label>
+              <select class="form-select" id="selectTimeAxisRangeMode">
+                <option value="auto" ${!isManualTimeRange ? 'selected' : ''}>自動（列車データから算出）</option>
+                <option value="manual" ${isManualTimeRange ? 'selected' : ''}>手動（終端時刻を指定）</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">手動終端時刻:</label>
+              <select class="form-select" id="selectTimeAxisEndHour" ${!isManualTimeRange ? 'disabled' : ''}>
+                ${[22, 23, 24, 25, 26, 27, 28].map(h => {
+                  const optLabel = h >= 24 ? `${h}:00 (翌${h - 24}時)` : `${h}:00`;
+                  return `<option value="${h}" ${endHour === h ? 'selected' : ''}>${optLabel}</option>`;
+                }).join("")}
+              </select>
+            </div>
+          </div>
+          <div class="form-row-grid" style="margin-top: 10px;">
+            <div class="form-col">
+              <label class="form-label">時刻罫線の間隔:</label>
+              <select class="form-select" id="selectTimeAxisGridMinutes">
+                <option value="30" ${set.timeAxisGridMinutes !== 60 ? 'selected' : ''}>30分補助線あり</option>
+                <option value="60" ${set.timeAxisGridMinutes === 60 ? 'selected' : ''}>1時間ごとのみ</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">24時以降の目盛り表記:</label>
+              <select class="form-select" id="selectTimeAxisLateNightFormat">
+                <option value="24plus" ${(set.timeAxisLateNightFormat || '24plus') === '24plus' ? 'selected' : ''}>24, 25, 26 ...（標準）</option>
+                <option value="zero" ${set.timeAxisLateNightFormat === 'zero' ? 'selected' : ''}>0, 1, 2 ...</option>
+                <option value="yoku" ${set.timeAxisLateNightFormat === 'yoku' ? 'selected' : ''}>翌0, 翌1, 翌2 ...</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">時刻・駅略称ラベル:</label>
+              <select class="form-select" id="selectTimeAxisLabelDensity">
+                <option value="auto" ${set.timeAxisLabelDensity !== 'full' ? 'selected' : ''}>自動間引き（重なり回避）</option>
+                <option value="full" ${set.timeAxisLabelDensity === 'full' ? 'selected' : ''}>全列車に極力表示</option>
+              </select>
             </div>
           </div>
         </div>
@@ -1408,7 +1514,7 @@ class BoxDiagramTableEditor {
 
       const notesTable = this.container.querySelector("#notesGridTable");
       if (notesTable) {
-        notesTable.addEventListener("input", (e) => {
+        const handleNoteUpdate = (e, allowModeRerender) => {
           const tr = e.target.closest("tr");
           if (!tr) return;
           const id = tr.dataset.noteId;
@@ -1429,32 +1535,20 @@ class BoxDiagramTableEditor {
             val = Number.isFinite(parsed) ? parsed : (field === "fontSize" ? 10.72 : (field === "x" ? 202.40 : 340.48));
           } else if (field === "page") {
             val = (val === "all") ? "all" : (parseInt(val, 10) || 1);
+          } else if (field === "axisMode") {
+            val = (val === "time") ? "time" : "station";
           }
 
           this.safeMutate(() => {
             this.model.updateNote(id, { [field]: val });
           });
-        });
-
-        notesTable.addEventListener("change", (e) => {
-          const tr = e.target.closest("tr");
-          if (!tr) return;
-          const id = tr.dataset.noteId;
-          const field = e.target.dataset.noteField;
-          if (!field) return;
-
-          let val = e.target.value;
-          if (field === "x" || field === "y" || field === "fontSize") {
-            const parsed = parseFloat(val);
-            val = Number.isFinite(parsed) ? parsed : (field === "fontSize" ? 10.72 : (field === "x" ? 202.40 : 340.48));
-          } else if (field === "page") {
-            val = (val === "all") ? "all" : (parseInt(val, 10) || 1);
+          if (allowModeRerender && field === "axisMode") {
+            this.render();
           }
+        };
 
-          this.safeMutate(() => {
-            this.model.updateNote(id, { [field]: val });
-          });
-        });
+        notesTable.addEventListener("input", (e) => handleNoteUpdate(e, false));
+        notesTable.addEventListener("change", (e) => handleNoteUpdate(e, true));
 
         notesTable.addEventListener("click", (e) => {
           const btn = e.target.closest("button");
@@ -1491,21 +1585,48 @@ class BoxDiagramTableEditor {
         });
       }
 
-      const selectPageSize = this.container.querySelector("#selectPageSize");
-      if (selectPageSize) {
-        selectPageSize.addEventListener("change", (e) => {
+      const bindSettingSelect = (selector, key, transform = (v) => v, rerenderAfter = false) => {
+        const el = this.container.querySelector(selector);
+        if (!el) return;
+        el.addEventListener("change", (e) => {
           this.safeMutate(() => {
-            this.model.updateSettings({ pageSize: e.target.value });
+            this.model.updateSettings({ [key]: transform(e.target.value) });
           });
+          if (rerenderAfter) {
+            this.render();
+          }
         });
-      }
+      };
 
-      const selectOrientation = this.container.querySelector("#selectOrientation");
-      if (selectOrientation) {
-        selectOrientation.addEventListener("change", (e) => {
+      bindSettingSelect("#selectPageSize", "pageSize");
+      bindSettingSelect("#selectOrientation", "orientation");
+      bindSettingSelect("#selectTimeAxisPageSize", "timeAxisPageSize");
+      bindSettingSelect("#selectTimeAxisOrientation", "timeAxisOrientation");
+      bindSettingSelect("#selectXAxisMode", "xAxisMode");
+      bindSettingSelect("#selectTimeAxisStartHour", "timeAxisStartHour", (v) => {
+        const n = parseInt(v, 10);
+        return Number.isNaN(n) ? 4 : n;
+      });
+      bindSettingSelect("#selectTimeAxisRangeMode", "timeAxisRangeMode", (v) => v, true);
+      bindSettingSelect("#selectTimeAxisEndHour", "timeAxisEndHour", (v) => parseInt(v, 10) || 25);
+      bindSettingSelect("#selectTimeAxisGridMinutes", "timeAxisGridMinutes", (v) => parseInt(v, 10) === 60 ? 60 : 30);
+      bindSettingSelect("#selectTimeAxisLateNightFormat", "timeAxisLateNightFormat");
+      bindSettingSelect("#selectTimeAxisLabelDensity", "timeAxisLabelDensity");
+
+      const checkSeparatePageByAxis = this.container.querySelector("#checkSeparatePageByAxis");
+      if (checkSeparatePageByAxis) {
+        checkSeparatePageByAxis.addEventListener("change", (e) => {
+          const checked = !!e.target.checked;
+          const cur = this.model.getSettings();
+          const patch = { separatePageSettingsByAxisMode: checked };
+          if (checked) {
+            if (!cur.timeAxisPageSize) patch.timeAxisPageSize = cur.pageSize || "A4";
+            if (!cur.timeAxisOrientation) patch.timeAxisOrientation = "landscape";
+          }
           this.safeMutate(() => {
-            this.model.updateSettings({ orientation: e.target.value });
+            this.model.updateSettings(patch);
           });
+          this.render();
         });
       }
 
@@ -1595,7 +1716,13 @@ class BoxDiagramTableEditor {
             stationHeaderDirection: "vertical",
             subHeaderMode: "omitFirst",
             selfHighlightStyle: "red",
-            autoSyncCoupled: true
+            autoSyncCoupled: true,
+            timeAxisStartHour: 4,
+            timeAxisRangeMode: "auto",
+            timeAxisEndHour: 25,
+            timeAxisGridMinutes: 30,
+            timeAxisLateNightFormat: "24plus",
+            timeAxisLabelDensity: "auto"
           });
           this.render();
         });

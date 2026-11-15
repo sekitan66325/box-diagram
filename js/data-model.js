@@ -17,6 +17,65 @@ class BoxDiagramDataModel {
     this.isApplyingHistory = false;
   }
 
+  // 用紙サイズ定義（すべて 1 : sqrt(2) 比率）
+  static get PAGE_SPECS() {
+    return {
+      A3: { label: "A3 (297 × 420 mm)", baseW: 1123, baseH: 1587, canvasScale: 1.414, mmPortrait: "297mm 420mm", mmLandscape: "420mm 297mm" },
+      B4: { label: "B4 (257 × 364 mm)", baseW: 971, baseH: 1374, canvasScale: 1.224, mmPortrait: "257mm 364mm", mmLandscape: "364mm 257mm" },
+      A4: { label: "A4 (210 × 297 mm)", baseW: 794, baseH: 1123, canvasScale: 1.0, mmPortrait: "A4 portrait", mmLandscape: "A4 landscape" },
+      B5: { label: "B5 (182 × 257 mm)", baseW: 688, baseH: 971, canvasScale: 1.0, mmPortrait: "182mm 257mm", mmLandscape: "257mm 182mm" },
+      A5: { label: "A5 (148 × 210 mm)", baseW: 559, baseH: 794, canvasScale: 0.78, mmPortrait: "148mm 210mm", mmLandscape: "210mm 148mm" },
+      B6: { label: "B6 (128 × 182 mm)", baseW: 484, baseH: 688, canvasScale: 0.72, mmPortrait: "128mm 182mm", mmLandscape: "182mm 128mm" }
+    };
+  }
+
+  /**
+   * 現在の軸モードおよび用紙設定から実効キャンバス／印刷サイズを解決する
+   */
+  static getEffectivePageConfig(settings = {}) {
+    const s = settings || {};
+    const specs = BoxDiagramDataModel.PAGE_SPECS;
+    const xAxisMode = s.xAxisMode === "time" ? "time" : "station";
+    const isSeparateMode = !!s.separatePageSettingsByAxisMode;
+
+    const rawSize = (isSeparateMode && xAxisMode === "time")
+      ? (s.timeAxisPageSize || s.pageSize || "A4")
+      : (s.pageSize || "A4");
+    const pageSize = specs[rawSize] ? rawSize : "A4";
+    const spec = specs[pageSize];
+
+    const rawOrient = (isSeparateMode && xAxisMode === "time")
+      ? (s.timeAxisOrientation || "landscape")
+      : (s.orientation || "portrait");
+    const orientation = rawOrient === "landscape" ? "landscape" : "portrait";
+
+    const isLandscape = orientation === "landscape";
+    const baseW = isLandscape ? spec.baseH : spec.baseW;
+    const baseH = isLandscape ? spec.baseW : spec.baseH;
+    const baseSvgW = isLandscape ? 1587.36 : 1122.56;
+    const baseSvgH = isLandscape ? 1122.56 : 1587.36;
+    const canvasScale = spec.canvasScale || 1.0;
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const canvasW = canvasScale === 1.0 ? baseSvgW : round2(baseSvgW * canvasScale);
+    const canvasH = canvasScale === 1.0 ? baseSvgH : round2(baseSvgH * canvasScale);
+    const cssPageSize = isLandscape ? spec.mmLandscape : spec.mmPortrait;
+
+    return {
+      xAxisMode,
+      isSeparateMode,
+      pageSize,
+      orientation,
+      isLandscape,
+      spec,
+      baseW,
+      baseH,
+      canvasW,
+      canvasH,
+      canvasScale,
+      cssPageSize
+    };
+  }
+
   // 初期化（プリセットまたは保存データからロード）
   load(initialData) {
     this.data = this.normalizeData(JSON.parse(JSON.stringify(initialData)));
@@ -28,6 +87,20 @@ class BoxDiagramDataModel {
   // データ正規化（後方互換性・欠損プロパティの補完）
   normalizeData(raw) {
     if (!raw) raw = {};
+    const specs = BoxDiagramDataModel.PAGE_SPECS;
+    const rawSet = raw.settings || {};
+    const normPageSize = specs[rawSet.pageSize] ? rawSet.pageSize : "A4";
+    const normTimePageSize = specs[rawSet.timeAxisPageSize] ? rawSet.timeAxisPageSize : normPageSize;
+    const normStartHour = (typeof rawSet.timeAxisStartHour === "number" && !Number.isNaN(rawSet.timeAxisStartHour))
+      ? Math.max(0, Math.min(12, Math.round(rawSet.timeAxisStartHour)))
+      : 4;
+    const normEndHour = (typeof rawSet.timeAxisEndHour === "number" && !Number.isNaN(rawSet.timeAxisEndHour))
+      ? Math.max(normStartHour + 4, Math.min(28, Math.round(rawSet.timeAxisEndHour)))
+      : 25;
+    const normLateFmt = ["24plus", "zero", "yoku"].includes(rawSet.timeAxisLateNightFormat)
+      ? rawSet.timeAxisLateNightFormat
+      : "24plus";
+
     const d = {
       version: raw.version || "2.0",
       metadata: Object.assign({
@@ -49,11 +122,33 @@ class BoxDiagramDataModel {
         showLegend: false,
         symbolScale: 1.0,
         symbolFill: "preset",
-        autoSyncCoupled: true
-      }, raw.settings || {}, {
-        autoSyncCoupled: raw.settings && typeof raw.settings.autoSyncCoupled === "boolean" ? raw.settings.autoSyncCoupled : true,
-        partialConnectStepRows: raw.settings && typeof raw.settings.partialConnectStepRows === "number" && !Number.isNaN(raw.settings.partialConnectStepRows)
-          ? Math.max(0, raw.settings.partialConnectStepRows)
+        autoSyncCoupled: true,
+        xAxisMode: "station",
+        separatePageSettingsByAxisMode: false,
+        timeAxisPageSize: normTimePageSize,
+        timeAxisOrientation: "landscape",
+        timeAxisStartHour: normStartHour,
+        timeAxisRangeMode: "auto",
+        timeAxisEndHour: normEndHour,
+        timeAxisGridMinutes: 30,
+        timeAxisLateNightFormat: "24plus",
+        timeAxisLabelDensity: "auto"
+      }, rawSet, {
+        pageSize: normPageSize,
+        orientation: rawSet.orientation === "landscape" ? "landscape" : "portrait",
+        xAxisMode: rawSet.xAxisMode === "time" ? "time" : "station",
+        separatePageSettingsByAxisMode: !!rawSet.separatePageSettingsByAxisMode,
+        timeAxisPageSize: normTimePageSize,
+        timeAxisOrientation: rawSet.timeAxisOrientation === "portrait" ? "portrait" : "landscape",
+        timeAxisStartHour: normStartHour,
+        timeAxisRangeMode: rawSet.timeAxisRangeMode === "manual" ? "manual" : "auto",
+        timeAxisEndHour: normEndHour,
+        timeAxisGridMinutes: rawSet.timeAxisGridMinutes === 60 ? 60 : 30,
+        timeAxisLateNightFormat: normLateFmt,
+        timeAxisLabelDensity: rawSet.timeAxisLabelDensity === "full" ? "full" : "auto",
+        autoSyncCoupled: typeof rawSet.autoSyncCoupled === "boolean" ? rawSet.autoSyncCoupled : true,
+        partialConnectStepRows: typeof rawSet.partialConnectStepRows === "number" && !Number.isNaN(rawSet.partialConnectStepRows)
+          ? Math.max(0, rawSet.partialConnectStepRows)
           : 1
       }),
       stations: Array.isArray(raw.stations) && raw.stations.length > 0
@@ -117,7 +212,8 @@ class BoxDiagramDataModel {
       }) : [],
       notes: Array.isArray(raw.notes) ? raw.notes.map((n, idx) => ({
         id: n.id || `note-${idx}`,
-        page: typeof n.page === "number" ? n.page : (n.page ? parseInt(n.page, 10) : 1),
+        page: n.page === "all" ? "all" : (typeof n.page === "number" ? n.page : (n.page ? (parseInt(n.page, 10) || 1) : 1)),
+        axisMode: n.axisMode === "time" ? "time" : "station",
         text: n.text || "",
         x: typeof n.x === "number" ? n.x : 200,
         y: typeof n.y === "number" ? n.y : 300,
@@ -541,6 +637,15 @@ class BoxDiagramDataModel {
     const m = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})$/);
     if (!m) return null;
     return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
+  /**
+   * 営業開始時刻（起点分）を基準として時間軸座標用の通し分を計算（例: 起点4:00のとき 0:15 → 1455分）
+   */
+  _parseTimeAxisMinutes(timeStr, dayStartMinutes = 240) {
+    const m = this._parseTimeMinutes(timeStr);
+    if (m === null) return null;
+    return m < dayStartMinutes ? m + 1440 : m;
   }
 
   getFormationOrder(rosterId, train) {
@@ -1058,18 +1163,21 @@ class BoxDiagramDataModel {
     let noteId = "note-" + Date.now();
     this.mutate("notes-add", () => {
       const pageVal = (note.page === "all" || Number.isFinite(note.page)) ? note.page : 1;
+      const defaultAxisMode = (this.data && this.data.settings && this.data.settings.xAxisMode === "time") ? "time" : "station";
+      const axisMode = note.axisMode === "time" ? "time" : (note.axisMode === "station" ? "station" : defaultAxisMode);
       const xVal = Number.isFinite(note.x) ? Math.round(note.x * 100) / 100 : 202.40;
       const yVal = Number.isFinite(note.y) ? Math.round(note.y * 100) / 100 : 340.48;
       const newNote = Object.assign({
         id: noteId,
         page: pageVal,
+        axisMode,
         text: "注記テキスト",
         x: xVal,
         y: yVal,
         color: "#FF0000",
         fontSize: 10.72,
         font: "F1"
-      }, note, { page: pageVal, x: xVal, y: yVal });
+      }, note, { page: pageVal, axisMode, x: xVal, y: yVal });
       this.data.notes.push(newNote);
     });
     return noteId;
@@ -1104,11 +1212,11 @@ class BoxDiagramDataModel {
   validateTime(timeStr) {
     if (!timeStr || timeStr.trim() === "") return { valid: true };
     const m = timeStr.trim().match(/^(\d{1,2}):(\d{2})$/);
-    if (!m) return { valid: false, message: "時刻は H:MM または HH:MM 形式で入力してください（例: 6:31）" };
+    if (!m) return { valid: false, message: "時刻は H:MM または HH:MM 形式で入力してください（例: 6:31, 25:15）" };
     const h = parseInt(m[1], 10);
     const mm = parseInt(m[2], 10);
-    if (h < 0 || h > 24 || mm < 0 || mm >= 60) {
-      return { valid: false, message: "有効な時間範囲（0:00〜24:00）で入力してください" };
+    if (h < 0 || h > 27 || mm < 0 || mm >= 60) {
+      return { valid: false, message: "有効な時間範囲（0:00〜27:59）で入力してください" };
     }
     return { valid: true };
   }

@@ -41,25 +41,122 @@ class BoxDiagramRenderer {
    * @returns {Array<{ pageIndex: number, totalPages: number, svgHtml: string }>}
    */
   renderPages(data) {
+    this.lastDiagnostics = null;
     if (!data || !data.rosters || data.rosters.length === 0) {
       return [{ pageIndex: 1, totalPages: 1, svgHtml: this.renderEmptySvg(data) }];
     }
 
+    const geom = this.getPageGeometry(data);
+    const timeRange = geom.xAxisMode === "time" ? this.computeTimeAxisRange(data) : null;
+    const diagAcc = {
+      omittedTimeLabelCount: 0,
+      multiLaneRosterCount: 0,
+      labelOverlapCount: 0
+    };
+
     // ページの分割（自動改ページ / 手動改ページ）
-    const pages = this.paginateRosters(data);
+    const pages = this.paginateRosters(data, geom);
     const totalPages = pages.length;
 
-    return pages.map((pageRosters, pIdx) => {
+    const result = pages.map((pageRosters, pIdx) => {
       const pageIndex = pIdx + 1;
-      const svgHtml = this.renderSinglePage(data, pageRosters, pageIndex, totalPages);
+      const svgHtml = geom.xAxisMode === "time"
+        ? this.renderTimeAxisSinglePage(data, pageRosters, pageIndex, totalPages, geom, timeRange, diagAcc)
+        : this.renderSinglePage(data, pageRosters, pageIndex, totalPages, geom);
       return { pageIndex, totalPages, svgHtml };
     });
+
+    this.lastDiagnostics = this.buildLayoutDiagnostics(data, geom, timeRange, totalPages, diagAcc);
+    return result;
+  }
+
+  /**
+   * 直近の renderPages 実行で算出されたレイアウト診断・用紙提案情報を返す
+   */
+  getLastDiagnostics() {
+    return this.lastDiagnostics || null;
+  }
+
+  /**
+   * 現在の設定から論理SVGキャンバス＆枠座標を解決する
+   * （A4・B5縦向きでは従来座標と0.00px完全一致を維持）
+   */
+  getPageGeometry(data) {
+    const settings = (data && data.settings) || {};
+    const cfg = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.getEffectivePageConfig)
+      ? BoxDiagramDataModel.getEffectivePageConfig(settings)
+      : {
+          xAxisMode: settings.xAxisMode === "time" ? "time" : "station",
+          isSeparateMode: !!settings.separatePageSettingsByAxisMode,
+          pageSize: settings.pageSize || "A4",
+          orientation: settings.orientation === "landscape" ? "landscape" : "portrait",
+          isLandscape: settings.orientation === "landscape",
+          canvasW: settings.orientation === "landscape" ? 1587.36 : 1122.56,
+          canvasH: settings.orientation === "landscape" ? 1122.56 : 1587.36,
+          canvasScale: 1.0
+        };
+
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const W = cfg.canvasW;
+    const H = cfg.canvasH;
+    const isLandscape = cfg.isLandscape;
+    const isExactClassicA4B5Portrait = (cfg.canvasScale === 1.0 && !isLandscape);
+    const isCompact = cfg.canvasScale < 0.9;
+
+    const borderWidth = 2.56;
+    const tableLeft = isCompact ? 38.0 : 53.92;
+    const rosterColW = isCompact ? 56.0 : 66.40;
+    const tableInnerX = round2(tableLeft + rosterColW);
+    const tableRight = isExactClassicA4B5Portrait ? 1064.96 : round2(W - tableLeft - 3.68);
+    const headerTop = 48.64;
+    const headerBottom = 98.72;
+    const Y_MAX = isExactClassicA4B5Portrait
+      ? 1420.0
+      : round2(H - (isCompact ? 112.0 : 167.36));
+    const footerX = isExactClassicA4B5Portrait ? 550.72 : round2(W / 2);
+    const footerY = isExactClassicA4B5Portrait ? 1552.96 : round2(H - (isCompact ? 26.0 : 34.40));
+
+    const stationPlotLeft = isExactClassicA4B5Portrait ? 200.32 : round2(tableInnerX + (isCompact ? 56.0 : 80.0));
+    const stationPlotRight = isExactClassicA4B5Portrait ? 987.52 : round2(tableRight - (isCompact ? 54.0 : 77.44));
+
+    const timePlotLeft = round2(tableInnerX + (isCompact ? 24.0 : 34.0));
+    const timePlotRight = round2(tableRight - (isCompact ? 24.0 : 34.0));
+
+    return {
+      xAxisMode: cfg.xAxisMode,
+      isSeparateMode: cfg.isSeparateMode,
+      pageSize: cfg.pageSize,
+      orientation: cfg.orientation,
+      isLandscape,
+      canvasScale: cfg.canvasScale,
+      W,
+      H,
+      borderWidth,
+      tableLeft,
+      rosterColW,
+      tableInnerX,
+      tableRight,
+      headerTop,
+      headerBottom,
+      Y_MAX,
+      footerX,
+      footerY,
+      titleLeftX: isExactClassicA4B5Portrait ? 54.24 : round2(tableLeft + 0.32),
+      copyRightX: isExactClassicA4B5Portrait ? 1066.24 : round2(tableRight + 1.28),
+      rosterLabelX: isExactClassicA4B5Portrait ? 88.40 : round2(tableLeft + rosterColW * 0.519),
+      stationPlotLeft,
+      stationPlotRight,
+      timePlotLeft,
+      timePlotRight,
+      isExactClassicA4B5Portrait
+    };
   }
 
   /**
    * 運用のページ分割計算
    */
-  paginateRosters(data) {
+  paginateRosters(data, geom = null) {
+    const g = geom || this.getPageGeometry(data);
     const settings = data.settings || {};
     const mode = settings.pageBreakMode || "auto";
     const rosters = data.rosters;
@@ -81,21 +178,25 @@ class BoxDiagramRenderer {
     }
 
     // 自動改ページ (Auto Mode)
-    // ページ上限高さ Y_max = 1420 px (フッター余白考慮)
-    const Y_MAX = 1420.0;
+    const Y_MAX = g.Y_MAX;
     const pages = [];
     let currentPage = [];
-    let currentY = 101.28; // ヘッダー枠下端
+    let currentY = g.headerBottom + g.borderWidth; // ヘッダー枠下端 101.28
 
     for (let i = 0; i < rosters.length; i++) {
       const roster = rosters[i];
       const isFirst = currentPage.length === 0;
-      const blockHeight = this.calculateRosterBlockHeight(data, roster, isFirst);
+      const blockHeight = g.xAxisMode === "time"
+        ? this.calculateTimeAxisRosterBlockHeight(data, roster, isFirst)
+        : this.calculateRosterBlockHeight(data, roster, isFirst);
 
       if (!isFirst && (currentY + blockHeight > Y_MAX || roster.pageBreakAfter)) {
         pages.push(currentPage);
         currentPage = [roster];
-        currentY = 101.28 + this.calculateRosterBlockHeight(data, roster, true);
+        const nextBlockHeight = g.xAxisMode === "time"
+          ? this.calculateTimeAxisRosterBlockHeight(data, roster, true)
+          : this.calculateRosterBlockHeight(data, roster, true);
+        currentY = g.headerBottom + g.borderWidth + nextBlockHeight;
       } else {
         currentPage.push(roster);
         currentY += blockHeight;
@@ -146,9 +247,103 @@ class BoxDiagramRenderer {
   }
 
   /**
-   * 単一ページのSVG描画
+   * 論理駅 X 座標 [200.32, 987.52] を現在ページのキャンバスプロット範囲へ写像する
    */
-  renderSinglePage(data, pageRosters, pageIndex, totalPages) {
+  mapStationXToCanvas(logicalX, geom) {
+    if (!Number.isFinite(logicalX)) return geom.stationPlotLeft;
+    if (geom.isExactClassicA4B5Portrait) return logicalX;
+    const srcSpan = 987.52 - 200.32;
+    const dstSpan = geom.stationPlotRight - geom.stationPlotLeft;
+    const t = (logicalX - 200.32) / srcSpan;
+    return Math.round((geom.stationPlotLeft + t * dstSpan) * 100) / 100;
+  }
+
+  /**
+   * 外枠縦線・注記・フッター・SVG全体の組み立て共通ヘルパー
+   */
+  finalizeSvgPage(elements, data, geom, prevBlockBorderBottom, pageIndex, totalPages, activeAxisMode) {
+    const {
+      W, H, borderWidth, tableLeft, tableInnerX, tableRight, headerTop,
+      titleLeftX, copyRightX, footerX, footerY
+    } = geom;
+
+    const titleText = data.metadata ? (data.metadata.title || "") : "";
+    const copyText = data.metadata ? (data.metadata.copyright || "") : "";
+
+    const headerChrome = `
+      <text class="font-f1" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>
+      <text class="font-f1" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>
+      <!-- ヘッダー上枠線 -->
+      <rect x="${tableLeft}" y="${headerTop}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
+      <!-- ヘッダー下枠線 -->
+      <rect x="${tableLeft}" y="${geom.headerBottom}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
+      <text class="font-f1" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">運用番号</text>
+    `;
+
+    // 左右の外枠縦線 (表全体の高さをカバー)
+    const tableTotalH = prevBlockBorderBottom - headerTop;
+    elements.push(`
+      <!-- 左外枠線 -->
+      <rect x="${tableLeft}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
+      <!-- 運用番号列境界線 -->
+      <rect x="${tableInnerX}" y="${(headerTop + borderWidth).toFixed(2)}" width="${borderWidth}" height="${(tableTotalH - borderWidth).toFixed(2)}" fill="#000000" />
+      <!-- 右外枠線 -->
+      <rect x="${tableRight}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
+    `);
+
+    // 注記テキスト (Notes) の描画（該当ページ・該当軸モードのみ描画）
+    if (data.notes && data.notes.length > 0) {
+      for (const n of data.notes) {
+        const noteAxis = n.axisMode === "time" ? "time" : "station";
+        if (noteAxis !== activeAxisMode) continue;
+
+        const notePage = (n.page === "all" || n.page === undefined) ? "all" : (typeof n.page === "number" ? n.page : parseInt(n.page, 10));
+        if (notePage !== "all" && notePage !== pageIndex) {
+          continue;
+        }
+
+        const noteX = Number.isFinite(n.x) ? n.x : 202.40;
+        const noteY = Number.isFinite(n.y) ? n.y : 340.48;
+        const noteColor = n.color || "#FF0000";
+        const noteSize = Number.isFinite(n.fontSize) ? n.fontSize : 10.72;
+
+        elements.push(`
+          <g class="diagram-note" data-note-id="${this.escapeXml(n.id)}" transform="translate(${noteX.toFixed(2)}, ${noteY.toFixed(2)})" style="cursor: move;">
+            <text class="font-f1" x="0" y="0" font-size="${noteSize}" fill="${noteColor}">${this.escapeXml(n.text)}</text>
+          </g>
+        `);
+      }
+    }
+
+    // フッターページ番号
+    elements.push(`
+      <text class="font-f1" x="${footerX}" y="${footerY}" font-size="13.28" fill="#000000" text-anchor="middle">${pageIndex}/${totalPages}</text>
+    `);
+
+    return `
+      <svg class="box-diagram-svg" viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <style>
+            .font-f1 { font-family: "MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif; }
+            .font-f2 { font-family: "MS Mincho", "ＭＳ 明朝", serif; }
+            .font-f3 { font-family: "MS Gothic", "ＭＳ ゴシック", monospace; }
+            .train-line-group { cursor: pointer; }
+            .train-line-group:hover line { stroke-width: 2.2px; }
+            .diagram-note:hover text { text-decoration: underline; }
+          </style>
+        </defs>
+        <rect width="${W}" height="${H}" fill="#FFFFFF" />
+        ${headerChrome}
+        ${elements.join("\n")}
+      </svg>
+    `;
+  }
+
+  /**
+   * 単一ページのSVG描画（横軸＝駅モード）
+   */
+  renderSinglePage(data, pageRosters, pageIndex, totalPages, geomArg = null) {
+    const geom = geomArg || this.getPageGeometry(data);
     const settings = data.settings || {};
     const R = typeof settings.baseRowHeight === "number" ? settings.baseRowHeight : 12.96;
     const S = typeof settings.rosterStepRows === "number" ? settings.rosterStepRows : 2;
@@ -157,55 +352,30 @@ class BoxDiagramRenderer {
     const subHeaderMode = settings.subHeaderMode || "omitFirst";
     const highlightStyle = settings.selfHighlightStyle || "red";
 
-    const borderWidth = 2.56;
+    const borderWidth = geom.borderWidth;
     const subLineWidth = 1.28;
     const delta = (borderWidth - subLineWidth) / 2; // 0.64
 
-    const W = 1122.56;
-    const H = 1587.36;
+    const { tableLeft, tableInnerX, tableRight, headerBottom } = geom;
 
-    // 主要駅と座標（非表示駅も駅順から線形補間して解決）
+    // 主要駅と座標（非表示駅も駅順から線形補間して解決＋キャンバス写像）
     const visibleStations = (data.stations || []).filter(s => s.visible !== false);
-    const resolveStationX = this.createStationXResolver(data.stations || [], visibleStations);
+    const rawResolveStationX = this.createStationXResolver(data.stations || [], visibleStations);
+    const resolveStationX = (stationId, fallbackLogicalX) => {
+      const lx = rawResolveStationX(stationId, fallbackLogicalX);
+      if (lx === undefined) return undefined;
+      return this.mapStationXToCanvas(lx, geom);
+    };
 
     let elements = [];
 
-    // 1. 表外枠とメインヘッダーの固定座標
-    const tableLeft = 53.92;
-    const tableInnerX = 120.32;
-    const tableRight = 1064.96;
-
-    const headerTop = 48.64;
-    const headerBottom = 98.72;
-
-    // 左上タイトル & 右上著作権表記
-    const titleText = data.metadata ? (data.metadata.title || "") : "";
-    const copyText = data.metadata ? (data.metadata.copyright || "") : "";
-
-    elements.push(`
-      <text class="font-f1" x="54.24" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>
-      <text class="font-f1" x="1066.24" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>
-    `);
-
-    // メインヘッダー枠線
-    elements.push(`
-      <!-- ヘッダー上枠線 -->
-      <rect x="${tableLeft}" y="${headerTop}" width="${tableRight + borderWidth - tableLeft}" height="${borderWidth}" fill="#000000" />
-      <!-- ヘッダー下枠線 -->
-      <rect x="${tableLeft}" y="${headerBottom}" width="${tableRight + borderWidth - tableLeft}" height="${borderWidth}" fill="#000000" />
-    `);
-
-    // ヘッダー内テキスト「運用番号」
-    elements.push(`
-      <text class="font-f1" x="62.40" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">運用番号</text>
-    `);
-
     // 駅名ヘッダー描画 (縦書き vs 横書き)
     for (const st of visibleStations) {
+      const stX = this.mapStationXToCanvas(st.x, geom);
       const name = st.name || "";
       if (stationHeaderDir === "horizontal") {
         elements.push(`
-          <text class="font-f1" x="${st.x}" y="78.00" font-size="13.28" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
+          <text class="font-f1" x="${stX}" y="78.00" font-size="13.28" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
         `);
       } else {
         // 縦書きモード
@@ -214,16 +384,15 @@ class BoxDiagramRenderer {
           const char2 = name.length > 1 ? name[1] : "";
           if (name.length === 1) {
             elements.push(`
-              <text class="font-f1" x="${st.x}" y="79.68" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1" x="${stX}" y="79.68" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
             `);
           } else {
             elements.push(`
-              <text class="font-f1" x="${st.x}" y="71.52" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
-              <text class="font-f1" x="${st.x}" y="87.84" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
+              <text class="font-f1" x="${stX}" y="71.52" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1" x="${stX}" y="87.84" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
             `);
           }
         } else {
-          // 3文字以上: Y=62.00からY=89.00に均等配置
           const len = name.length;
           const startY = 62.00;
           const endY = 89.00;
@@ -232,7 +401,7 @@ class BoxDiagramRenderer {
           for (let ci = 0; ci < len; ci++) {
             const chY = startY + ci * stepY;
             elements.push(`
-              <text class="font-f1" x="${st.x}" y="${chY.toFixed(2)}" font-size="${fSize.toFixed(1)}" fill="#000000" text-anchor="middle">${this.escapeXml(name[ci])}</text>
+              <text class="font-f1" x="${stX}" y="${chY.toFixed(2)}" font-size="${fSize.toFixed(1)}" fill="#000000" text-anchor="middle">${this.escapeXml(name[ci])}</text>
             `);
           }
         }
@@ -242,6 +411,12 @@ class BoxDiagramRenderer {
     // 2. 運用ブロックの描画
     let prevBlockBorderTop = null;
     let prevBlockBorderBottom = headerBottom + borderWidth; // 101.28
+
+    const subHeaderLineX = tableInnerX + borderWidth;
+    const subHeaderLineW = tableRight - subHeaderLineX;
+    const blockBorderX = tableLeft + borderWidth;
+    const blockBorderW = tableRight + borderWidth - blockBorderX;
+    const labelOffsetScale = geom.canvasScale < 0.9 ? geom.canvasScale : 1.0;
 
     for (let rIdx = 0; rIdx < pageRosters.length; rIdx++) {
       const roster = pageRosters[rIdx];
@@ -268,6 +443,7 @@ class BoxDiagramRenderer {
       if (!isFirstOnPage && showSubHeader && subHeaderLineY !== null) {
         // 省略駅名文字 (下 真 茂)
         for (const st of visibleStations) {
+          const stX = this.mapStationXToCanvas(st.x, geom);
           const abbr = st.abbr || (st.name ? st.name[0] : "");
           // 元PDFでは下と茂は擬似太字、真は標準
           const isBold = (abbr === "下" || abbr === "茂");
@@ -275,13 +451,12 @@ class BoxDiagramRenderer {
           // テキスト基準線は線の上 1.76px
           const textY = subHeaderLineY - 1.76;
           elements.push(`
-            <text class="font-f3" x="${st.x}" y="${textY.toFixed(2)}" font-size="10.72" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
+            <text class="font-f3" x="${stX}" y="${textY.toFixed(2)}" font-size="10.72" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
           `);
         }
 
-        // サブヘッダー下部細線 (運用番号列は貫通せず 122.88 .. 1064.96 のみ)
         elements.push(`
-          <rect x="122.88" y="${subHeaderLineY.toFixed(2)}" width="942.08" height="1.28" fill="#000000" />
+          <rect x="${subHeaderLineX.toFixed(2)}" y="${subHeaderLineY.toFixed(2)}" width="${subHeaderLineW.toFixed(2)}" height="1.28" fill="#000000" />
         `);
       }
 
@@ -314,7 +489,7 @@ class BoxDiagramRenderer {
       // Y座標: (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32
       const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
       elements.push(`
-        <text class="font-f1" x="88.40" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
+        <text class="font-f1" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
       `);
 
       // 列車と折り返し線を描画
@@ -411,12 +586,12 @@ class BoxDiagramRenderer {
         const labelHtml = this.formatTrainLabelHtml(tr, roster.id, highlightStyle, textColor);
 
         if (isDown) {
-          const labelX = fromX + 80.80;
+          const labelX = fromX + 80.80 * labelOffsetScale;
           elements.push(`
             <text class="font-f1" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="start">${labelHtml}</text>
           `);
         } else {
-          const labelX = fromX - 84.00;
+          const labelX = fromX - 84.00 * labelOffsetScale;
           elements.push(`
             <text class="font-f1" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="end">${labelHtml}</text>
           `);
@@ -426,69 +601,16 @@ class BoxDiagramRenderer {
         this.renderSymbols(elements, tr, fromX, toX, yTop, lineColor, settings);
       }
 
-      // 運用ブロック下部太線 (56.48 .. 1067.52, 高さ 2.56px)
+      // 運用ブロック下部太線
       elements.push(`
-        <rect x="56.48" y="${blockBottomBorderTop.toFixed(2)}" width="1011.04" height="${borderWidth}" fill="#000000" />
+        <rect x="${blockBorderX.toFixed(2)}" y="${blockBottomBorderTop.toFixed(2)}" width="${blockBorderW.toFixed(2)}" height="${borderWidth}" fill="#000000" />
       `);
 
       prevBlockBorderTop = blockBottomBorderTop;
       prevBlockBorderBottom = blockBottomBorderBottom;
     }
 
-    // 左右の外枠縦線 (表全体の高さをカバー)
-    const tableTotalH = prevBlockBorderBottom - headerTop;
-    elements.push(`
-      <!-- 左外枠線 -->
-      <rect x="${tableLeft}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
-      <!-- 運用番号列境界線 -->
-      <rect x="${tableInnerX}" y="${headerTop + borderWidth}" width="${borderWidth}" height="${(tableTotalH - borderWidth).toFixed(2)}" fill="#000000" />
-      <!-- 右外枠線 -->
-      <rect x="${tableRight}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
-    `);
-
-    // 3. 注記テキスト (Notes) の描画（該当ページのみ描画）
-    if (data.notes && data.notes.length > 0) {
-      for (const n of data.notes) {
-        const notePage = (n.page === "all" || n.page === undefined) ? "all" : (typeof n.page === "number" ? n.page : parseInt(n.page, 10));
-        if (notePage !== "all" && notePage !== pageIndex) {
-          continue; // 他のページの注記は描画しない
-        }
-
-        const noteX = Number.isFinite(n.x) ? n.x : 202.40;
-        const noteY = Number.isFinite(n.y) ? n.y : 340.48;
-        const noteColor = n.color || "#FF0000";
-        const noteSize = Number.isFinite(n.fontSize) ? n.fontSize : 10.72;
-
-        elements.push(`
-          <g class="diagram-note" data-note-id="${this.escapeXml(n.id)}" transform="translate(${noteX.toFixed(2)}, ${noteY.toFixed(2)})" style="cursor: move;">
-            <text class="font-f1" x="0" y="0" font-size="${noteSize}" fill="${noteColor}">${this.escapeXml(n.text)}</text>
-          </g>
-        `);
-      }
-    }
-
-    // 4. フッターページ番号 (X = 550.72, Y = 1552.96)
-    elements.push(`
-      <text class="font-f1" x="550.72" y="1552.96" font-size="13.28" fill="#000000" text-anchor="middle">${pageIndex}/${totalPages}</text>
-    `);
-
-    // SVG全体の組み立て
-    return `
-      <svg class="box-diagram-svg" viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <style>
-            .font-f1 { font-family: "MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif; }
-            .font-f2 { font-family: "MS Mincho", "ＭＳ 明朝", serif; }
-            .font-f3 { font-family: "MS Gothic", "ＭＳ ゴシック", monospace; }
-            .train-line-group { cursor: pointer; }
-            .train-line-group:hover line { stroke-width: 2.2px; }
-            .diagram-note:hover text { text-decoration: underline; }
-          </style>
-        </defs>
-        <rect width="${W}" height="${H}" fill="#FFFFFF" />
-        ${elements.join("\n")}
-      </svg>
-    `;
+    return this.finalizeSvgPage(elements, data, geom, prevBlockBorderBottom, pageIndex, totalPages, "station");
   }
 
   /**
@@ -632,6 +754,701 @@ class BoxDiagramRenderer {
     };
   }
 
+  // ==================== 横軸＝時刻モード（運用線図／棒ダイヤ） ====================
+
+  _parseTimeMinutes(timeStr) {
+    if (!timeStr) return null;
+    const m = String(timeStr).trim().match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+  }
+
+  _parseTimeAxisMinutes(timeStr, dayStartMinutes = 240) {
+    const m = this._parseTimeMinutes(timeStr);
+    if (m === null) return null;
+    return m < dayStartMinutes ? m + 1440 : m;
+  }
+
+  _estimateTextWidth(text, fontSize = 10.72) {
+    if (!text) return 0;
+    let w = 0;
+    for (const ch of String(text)) {
+      const code = ch.charCodeAt(0);
+      w += (code <= 0x00ff) ? fontSize * 0.56 : fontSize * 0.96;
+    }
+    return w;
+  }
+
+  _getTrainLabelPlainText(train, selfRosterId) {
+    const rawNo = train.trainNo || "";
+    let coupledText = train.customCoupled || "";
+    if (!coupledText) {
+      if (Array.isArray(train.coupledFormation) && train.coupledFormation.length >= 2) {
+        const parts = train.coupledFormation.filter(Boolean);
+        if (selfRosterId && !parts.includes(selfRosterId)) parts.unshift(selfRosterId);
+        coupledText = `(${parts.join("＋")})`;
+      } else if (train.coupledPartner) {
+        coupledText = train.coupledPosition === "before"
+          ? `(${train.coupledPartner}＋${selfRosterId})`
+          : `(${selfRosterId}＋${train.coupledPartner})`;
+      }
+    }
+    if (!coupledText) return rawNo;
+    if (!coupledText.startsWith(rawNo) && rawNo !== "") return `${rawNo}${coupledText}`;
+    return coupledText;
+  }
+
+  computeTimeAxisRange(data) {
+    const settings = (data && data.settings) || {};
+    const startHourBase = (typeof settings.timeAxisStartHour === "number" && !Number.isNaN(settings.timeAxisStartHour))
+      ? Math.max(0, Math.min(12, Math.round(settings.timeAxisStartHour)))
+      : 4;
+    const dayStartMin = startHourBase * 60;
+
+    if (settings.timeAxisRangeMode === "manual") {
+      const endHourManual = (typeof settings.timeAxisEndHour === "number" && !Number.isNaN(settings.timeAxisEndHour))
+        ? Math.max(startHourBase + 4, Math.min(28, Math.round(settings.timeAxisEndHour)))
+        : 25;
+      return {
+        startHour: startHourBase,
+        endHour: endHourManual,
+        startMin: startHourBase * 60,
+        endMin: endHourManual * 60,
+        dayStartMin
+      };
+    }
+
+    let minM = Infinity;
+    let maxM = -Infinity;
+
+    for (const r of (data.rosters || [])) {
+      for (const tr of (r.trains || [])) {
+        let dm = this._parseTimeAxisMinutes(tr.depTime, dayStartMin);
+        let am = this._parseTimeAxisMinutes(tr.arrTime, dayStartMin);
+        if (dm !== null && am !== null && am < dm && am + 1440 - dm <= 720) {
+          am += 1440;
+        }
+        if (dm !== null) {
+          if (dm < minM) minM = dm;
+          if (dm > maxM) maxM = dm;
+        }
+        if (am !== null) {
+          if (am < minM) minM = am;
+          if (am > maxM) maxM = am;
+        }
+      }
+    }
+
+    if (!Number.isFinite(minM) || !Number.isFinite(maxM)) {
+      return { startHour: 5, endHour: 24, startMin: 300, endMin: 1440, dayStartMin };
+    }
+
+    const startHour = Math.max(startHourBase, Math.min(23, Math.floor(minM / 60)));
+    const endHour = Math.min(28, Math.max(startHour + 4, Math.ceil(maxM / 60)));
+    return {
+      startHour,
+      endHour,
+      startMin: startHour * 60,
+      endMin: endHour * 60,
+      dayStartMin
+    };
+  }
+
+  formatHourTickLabel(hour, lateNightFormat = "24plus") {
+    if (hour < 24) return String(hour);
+    const modH = hour - 24;
+    if (lateNightFormat === "zero") return String(modH);
+    if (lateNightFormat === "yoku") return `翌${modH}`;
+    return String(hour);
+  }
+
+  buildTimeAxisLanes(roster, dayStartMin = 240) {
+    const trains = (roster && roster.trains) || [];
+    if (trains.length === 0) return [[]];
+
+    const lanes = [];
+    const laneEnds = [];
+
+    for (let k = 0; k < trains.length; k++) {
+      const tr = trains[k];
+      let dm = this._parseTimeAxisMinutes(tr.depTime, dayStartMin);
+      let am = this._parseTimeAxisMinutes(tr.arrTime, dayStartMin);
+
+      if (dm !== null && am !== null && am < dm) {
+        if (am + 1440 - dm <= 720) {
+          am += 1440;
+        } else {
+          am = dm;
+        }
+      }
+
+      const hasDep = dm !== null;
+      const hasArr = am !== null;
+      if (!hasDep && !hasArr) continue;
+
+      const plotStartMin = hasDep ? dm : Math.max(dayStartMin, am - 12);
+      const plotEndMin = hasArr ? am : (dm + 12);
+
+      const item = {
+        train: tr,
+        index: k,
+        depMin: dm,
+        arrMin: am,
+        hasDep,
+        hasArr,
+        plotStartMin,
+        plotEndMin
+      };
+
+      let placedLane = -1;
+      for (let li = 0; li < lanes.length; li++) {
+        if (laneEnds[li] <= plotStartMin + 1) {
+          placedLane = li;
+          break;
+        }
+      }
+      if (placedLane === -1) {
+        lanes.push([item]);
+        laneEnds.push(plotEndMin);
+      } else {
+        lanes[placedLane].push(item);
+        laneEnds[placedLane] = Math.max(laneEnds[placedLane], plotEndMin);
+      }
+    }
+
+    return lanes.length > 0 ? lanes : [[]];
+  }
+
+  calculateTimeAxisRosterBlockHeight(data, roster, isFirstOnPage) {
+    const settings = data.settings || {};
+    const R = typeof settings.baseRowHeight === "number" ? settings.baseRowHeight : 12.96;
+    const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+    const subHeaderMode = settings.subHeaderMode || "omitFirst";
+    const borderWidth = 2.56;
+    const subLineWidth = 1.28;
+    const delta = (borderWidth - subLineWidth) / 2;
+
+    const startHourBase = (typeof settings.timeAxisStartHour === "number" && !Number.isNaN(settings.timeAxisStartHour))
+      ? Math.max(0, Math.min(12, Math.round(settings.timeAxisStartHour)))
+      : 4;
+    const lanes = this.buildTimeAxisLanes(roster, startHourBase * 60);
+    const laneCount = Math.max(1, lanes.length);
+
+    let h = 0;
+    if (!isFirstOnPage && subHeaderMode === "all") {
+      h += 1 * R + delta;
+    }
+
+    const topPad = Math.max(25.0, 2.05 * R * scale);
+    const lanePitch = Math.max(54.0, 4.4 * R * scale);
+    const bottomPad = Math.max(32.5, 2.55 * R * scale);
+
+    h += topPad + (laneCount - 1) * lanePitch + bottomPad + borderWidth;
+    return h;
+  }
+
+  _canPlaceHorizontalSpan(intervals, left, right, margin = 3.0) {
+    for (const iv of intervals) {
+      if (left < iv.right + margin && right > iv.left - margin) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  renderTimeAxisSinglePage(data, pageRosters, pageIndex, totalPages, geomArg = null, timeRangeArg = null, diagAcc = null) {
+    const geom = geomArg || this.getPageGeometry(data);
+    const timeRange = timeRangeArg || this.computeTimeAxisRange(data);
+    const settings = data.settings || {};
+    const R = typeof settings.baseRowHeight === "number" ? settings.baseRowHeight : 12.96;
+    const subHeaderMode = settings.subHeaderMode || "omitFirst";
+    const highlightStyle = settings.selfHighlightStyle || "red";
+    const gridMin = settings.timeAxisGridMinutes === 60 ? 60 : 30;
+    const lateFmt = settings.timeAxisLateNightFormat || "24plus";
+    const density = settings.timeAxisLabelDensity === "full" ? "full" : "auto";
+
+    const borderWidth = geom.borderWidth;
+    const subLineWidth = 1.28;
+    const delta = (borderWidth - subLineWidth) / 2;
+    const { tableLeft, tableInnerX, tableRight, headerTop, headerBottom, timePlotLeft, timePlotRight } = geom;
+
+    const spanMin = Math.max(60, timeRange.endMin - timeRange.startMin);
+    const plotW = timePlotRight - timePlotLeft;
+    const pxPerMin = plotW / spanMin;
+    const pxPerHour = pxPerMin * 60;
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const timeToX = (m) => round2(timePlotLeft + Math.max(0, Math.min(spanMin, m - timeRange.startMin)) * pxPerMin);
+
+    const stationAbbrMap = new Map();
+    (data.stations || []).forEach(st => {
+      stationAbbrMap.set(st.id, st.abbr || (st.name ? st.name[0] : ""));
+    });
+
+    const elements = [];
+
+    // 1. ヘッダー時間目盛り描画
+    const hourStep = pxPerHour < 28 ? 2 : 1;
+    const tickFontSize = lateFmt === "yoku" && pxPerHour < 48 ? 10.5 : (pxPerHour < 42 ? 11.2 : 12.8);
+
+    for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
+      const hx = timeToX(h * 60);
+      elements.push(`
+        <line x1="${hx}" y1="${(headerBottom - 7.5).toFixed(2)}" x2="${hx}" y2="${headerBottom}" stroke="#000000" stroke-width="1.1" />
+      `);
+      if ((h - timeRange.startHour) % hourStep === 0) {
+        const lbl = this.formatHourTickLabel(h, lateFmt);
+        elements.push(`
+          <text class="font-f1" x="${hx}" y="79.20" font-size="${tickFontSize}" fill="#000000" text-anchor="middle">${this.escapeXml(lbl)}</text>
+        `);
+      }
+      if (gridMin === 30 && h < timeRange.endHour) {
+        const x30 = timeToX(h * 60 + 30);
+        elements.push(`
+          <line x1="${x30}" y1="${(headerBottom - 4.0).toFixed(2)}" x2="${x30}" y2="${headerBottom}" stroke="#475569" stroke-width="0.8" />
+        `);
+      }
+    }
+
+    // 2. 運用ブロックの描画
+    let prevBlockBorderTop = null;
+    let prevBlockBorderBottom = headerBottom + borderWidth;
+
+    const subHeaderLineX = tableInnerX + borderWidth;
+    const subHeaderLineW = tableRight - subHeaderLineX;
+    const blockBorderX = tableLeft + borderWidth;
+    const blockBorderW = tableRight + borderWidth - blockBorderX;
+
+    for (let rIdx = 0; rIdx < pageRosters.length; rIdx++) {
+      const roster = pageRosters[rIdx];
+      const isFirstOnPage = (rIdx === 0);
+      const showSubHeader = !isFirstOnPage && subHeaderMode === "all";
+      const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+
+      const lanes = this.buildTimeAxisLanes(roster, timeRange.dayStartMin);
+      if (lanes.length > 1 && diagAcc) diagAcc.multiLaneRosterCount++;
+
+      let subHeaderLineY = null;
+      let blockTop = prevBlockBorderBottom;
+
+      if (showSubHeader) {
+        const refBorderTop = (prevBlockBorderTop !== null) ? prevBlockBorderTop : headerBottom;
+        subHeaderLineY = refBorderTop + 1 * R + delta;
+        for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
+          if ((h - timeRange.startHour) % hourStep !== 0) continue;
+          const hx = timeToX(h * 60);
+          const lbl = this.formatHourTickLabel(h, lateFmt);
+          elements.push(`
+            <text class="font-f3" x="${hx}" y="${(subHeaderLineY - 1.76).toFixed(2)}" font-size="9.6" fill="#334155" text-anchor="middle">${this.escapeXml(lbl)}</text>
+          `);
+        }
+        elements.push(`
+          <rect x="${subHeaderLineX.toFixed(2)}" y="${subHeaderLineY.toFixed(2)}" width="${subHeaderLineW.toFixed(2)}" height="1.28" fill="#000000" />
+        `);
+        blockTop = subHeaderLineY + 1.28;
+      }
+
+      const topPad = Math.max(25.0, 2.05 * R * scale);
+      const lanePitch = Math.max(54.0, 4.4 * R * scale);
+      const bottomPad = Math.max(32.5, 2.55 * R * scale);
+
+      const firstLaneY = blockTop + topPad;
+      const lastLaneY = firstLaneY + (Math.max(1, lanes.length) - 1) * lanePitch;
+      const blockBottomBorderTop = round2(lastLaneY + bottomPad);
+      const blockBottomBorderBottom = round2(blockBottomBorderTop + borderWidth);
+
+      // 背景時間軸グリッド（列車線の下層）
+      const gridTopY = blockTop;
+      const gridBottomY = blockBottomBorderTop;
+      for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
+        const hx = timeToX(h * 60);
+        elements.push(`
+          <line x1="${hx}" y1="${gridTopY.toFixed(2)}" x2="${hx}" y2="${gridBottomY.toFixed(2)}" stroke="#CBD5E1" stroke-width="0.80" />
+        `);
+        if (gridMin === 30 && h < timeRange.endHour) {
+          const x30 = timeToX(h * 60 + 30);
+          elements.push(`
+            <line x1="${x30}" y1="${gridTopY.toFixed(2)}" x2="${x30}" y2="${gridBottomY.toFixed(2)}" stroke="#E2E8F0" stroke-width="0.64" stroke-dasharray="2.5,2.5" />
+          `);
+        }
+      }
+
+      // 運用番号（左列中央）
+      const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
+      elements.push(`
+        <text class="font-f1" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
+      `);
+
+      // 各レーン描画
+      for (let li = 0; li < lanes.length; li++) {
+        const laneY = firstLaneY + li * lanePitch;
+        this.renderTimeAxisLane(
+          elements, data, roster, lanes[li], laneY,
+          timeToX, stationAbbrMap,
+          { plotLeft: timePlotLeft, plotRight: timePlotRight, highlightStyle, density, settings },
+          diagAcc
+        );
+      }
+
+      // ブロック下境界太線
+      elements.push(`
+        <rect x="${blockBorderX.toFixed(2)}" y="${blockBottomBorderTop.toFixed(2)}" width="${blockBorderW.toFixed(2)}" height="${borderWidth}" fill="#000000" />
+      `);
+
+      prevBlockBorderTop = blockBottomBorderTop;
+      prevBlockBorderBottom = blockBottomBorderBottom;
+    }
+
+    return this.finalizeSvgPage(elements, data, geom, prevBlockBorderBottom, pageIndex, totalPages, "time");
+  }
+
+  renderTimeAxisLane(elements, data, roster, laneItems, laneY, timeToX, stationAbbrMap, opts, diagAcc) {
+    if (!laneItems || laneItems.length === 0) return;
+
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const { plotLeft, plotRight, highlightStyle, density, settings } = opts;
+    const yCenter = round2(laneY + 0.64);
+
+    // 座標解決
+    const geomItems = laneItems.map(it => {
+      const rawX1 = timeToX(it.plotStartMin);
+      const rawX2 = timeToX(it.plotEndMin);
+      const x1 = Math.min(rawX1, rawX2);
+      const x2 = Math.max(rawX1, rawX2);
+      const visualX2 = (x2 - x1 < 2.0) ? Math.min(plotRight, x1 + 2.0) : x2;
+      return Object.assign({}, it, { x1, x2: visualX2, exactX2: x2 });
+    });
+
+    // 1. 連続折り返し待機線（前着駅 === 次発駅）
+    for (let i = 1; i < geomItems.length; i++) {
+      const prev = geomItems[i - 1];
+      const cur = geomItems[i];
+      if (
+        prev.train.toStation &&
+        cur.train.fromStation &&
+        prev.train.toStation === cur.train.fromStation &&
+        cur.x1 - prev.exactX2 >= 1.5
+      ) {
+        elements.push(`
+          <line x1="${prev.exactX2.toFixed(2)}" y1="${yCenter.toFixed(2)}" x2="${cur.x1.toFixed(2)}" y2="${yCenter.toFixed(2)}" stroke="#64748B" stroke-width="1.0" stroke-dasharray="3,2" />
+        `);
+      }
+    }
+
+    // 2. 列車線＆端ティック＆シンボル
+    for (const item of geomItems) {
+      const tr = item.train;
+      const type = this.getTrainType(data, tr.typeId);
+      const lineColor = type.lineColor || "#000000";
+      const isSelected = (this.selectedRosterId === roster.id && this.selectedTrainIndex === item.index);
+      const selectedGlow = isSelected ? `stroke="#2F6F73" stroke-width="4" stroke-opacity="0.4"` : ``;
+      const dashAttr = type.lineStyle === "dashed" ? `stroke-dasharray="6,3"` : (type.lineStyle === "dotted" ? `stroke-dasharray="2,2"` : ``);
+      const lineWidth = type.lineWidth || 1.28;
+
+      const hitW = Math.max(item.x2 - item.x1, 6);
+      elements.push(`
+        <g class="train-line-group ${isSelected ? 'selected' : ''}" data-roster-id="${this.escapeXml(roster.id)}" data-train-index="${item.index}">
+          ${isSelected ? `<line x1="${item.x1.toFixed(2)}" y1="${yCenter.toFixed(2)}" x2="${item.x2.toFixed(2)}" y2="${yCenter.toFixed(2)}" ${selectedGlow} />` : ''}
+          <line x1="${item.x1.toFixed(2)}" y1="${yCenter.toFixed(2)}" x2="${item.x2.toFixed(2)}" y2="${yCenter.toFixed(2)}" stroke="${lineColor}" stroke-width="${lineWidth}" ${dashAttr} />
+          <rect x="${item.x1.toFixed(2)}" y="${(yCenter - 5).toFixed(2)}" width="${hitW.toFixed(2)}" height="10" fill="transparent" />
+        </g>
+      `);
+
+      // 端点が明確に見える小ティック（シンボルが無い端のみ）
+      if (tr.depSymbol !== "circle" && tr.depSymbol !== "circle_filled") {
+        elements.push(`
+          <line x1="${item.x1.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x1.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="1.2" />
+        `);
+      }
+      if (tr.arrSymbol !== "triangle" && tr.arrSymbol !== "triangle_filled") {
+        elements.push(`
+          <line x1="${item.x2.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x2.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="1.2" />
+        `);
+      }
+
+      this.renderSymbols(elements, tr, item.x1, item.x2, laneY, lineColor, settings);
+    }
+
+    // 3. 上側ラベル：列番（＋併結＆自運用強調）2段スタガー衝突回避
+    const topRow1 = [];
+    const topRow2 = [];
+    const topY1 = round2(laneY - 5.2);
+    const topY2 = round2(laneY - 16.0);
+
+    for (let i = 0; i < geomItems.length; i++) {
+      const item = geomItems[i];
+      const tr = item.train;
+      const type = this.getTrainType(data, tr.typeId);
+      const textColor = type.textColor || "#000000";
+      const plain = this._getTrainLabelPlainText(tr, roster.id);
+      if (!plain) continue;
+
+      const fontSize = 10.0;
+      const w = this._estimateTextWidth(plain, fontSize);
+      const halfW = w / 2;
+      const midX = Math.max(plotLeft - 20 + halfW, Math.min(plotRight + 20 - halfW, (item.x1 + item.x2) / 2));
+      const left = midX - halfW;
+      const right = midX + halfW;
+
+      let chosenY = topY1;
+      if (this._canPlaceHorizontalSpan(topRow1, left, right, 3.0)) {
+        topRow1.push({ left, right });
+      } else if (this._canPlaceHorizontalSpan(topRow2, left, right, 3.0)) {
+        chosenY = topY2;
+        topRow2.push({ left, right });
+      } else {
+        chosenY = (i % 2 === 0) ? topY1 : topY2;
+        if (chosenY === topY1) topRow1.push({ left, right });
+        else topRow2.push({ left, right });
+        if (diagAcc) diagAcc.labelOverlapCount++;
+      }
+
+      const labelHtml = this.formatTrainLabelHtml(tr, roster.id, highlightStyle, textColor);
+      elements.push(`
+        <text class="font-f1" x="${midX.toFixed(2)}" y="${chosenY.toFixed(2)}" font-size="${fontSize}" text-anchor="middle">${labelHtml}</text>
+      `);
+    }
+
+    // 4. 下側1段目：駅略称（近接折り返し共通駅マージ ＋ 短列車外寄せ）
+    const abbrTokens = [];
+    for (let i = 0; i < geomItems.length; i++) {
+      const item = geomItems[i];
+      const tr = item.train;
+      const type = this.getTrainType(data, tr.typeId);
+      const textColor = type.textColor || "#000000";
+      const fromAbbr = stationAbbrMap.get(tr.fromStation) || "";
+      const toAbbr = stationAbbrMap.get(tr.toStation) || "";
+
+      const prev = i > 0 ? geomItems[i - 1] : null;
+      const mergeWithPrev = !!(
+        prev &&
+        prev.train.toStation &&
+        prev.train.toStation === tr.fromStation &&
+        item.x1 - prev.exactX2 < 24.0 &&
+        abbrTokens.length > 0 &&
+        abbrTokens[abbrTokens.length - 1].trainIndex === prev.index &&
+        abbrTokens[abbrTokens.length - 1].kind === "arr"
+      );
+
+      let depX = item.x1;
+      let arrX = item.x2;
+      if (!mergeWithPrev && item.x2 - item.x1 < 18.0 && fromAbbr && toAbbr) {
+        depX = Math.max(plotLeft - 22, item.x1 - 4.5);
+        arrX = Math.min(plotRight + 22, item.x2 + 4.5);
+      }
+
+      if (mergeWithPrev) {
+        const lastTok = abbrTokens[abbrTokens.length - 1];
+        lastTok.x = (prev.exactX2 + item.x1) / 2;
+        lastTok.kind = "turn";
+        lastTok.color = "#1E293B";
+        lastTok.bold = true;
+      } else if (fromAbbr) {
+        abbrTokens.push({ x: depX, text: fromAbbr, color: textColor, kind: "dep", trainIndex: item.index });
+      }
+
+      if (toAbbr) {
+        abbrTokens.push({ x: arrX, text: toAbbr, color: textColor, kind: "arr", trainIndex: item.index });
+      }
+    }
+
+    const abbrPlaced = [];
+    const abbrY = round2(laneY + 12.2);
+    for (const tok of abbrTokens) {
+      const fSize = 10.0;
+      const w = this._estimateTextWidth(tok.text, fSize);
+      let x = tok.x;
+      if (!this._canPlaceHorizontalSpan(abbrPlaced, x - w / 2, x + w / 2, 1.5)) {
+        const rightCand = x + 6.0;
+        const leftCand = x - 6.0;
+        if (this._canPlaceHorizontalSpan(abbrPlaced, rightCand - w / 2, rightCand + w / 2, 1.0)) {
+          x = rightCand;
+        } else if (this._canPlaceHorizontalSpan(abbrPlaced, leftCand - w / 2, leftCand + w / 2, 1.0)) {
+          x = leftCand;
+        }
+      }
+      abbrPlaced.push({ left: x - w / 2, right: x + w / 2 });
+      const fwAttr = tok.bold ? `font-weight="700"` : "";
+      elements.push(`
+        <text class="font-f1" x="${x.toFixed(2)}" y="${abbrY.toFixed(2)}" font-size="${fSize}" fill="${tok.color}" ${fwAttr} text-anchor="middle">${this.escapeXml(tok.text)}</text>
+      `);
+    }
+
+    // 5. 下側2段目（＋交互逃がし3段目）：発着時刻（auto時は過度な衝突箇所を間引き）
+    const timeCandidates = [];
+    for (const item of geomItems) {
+      const tr = item.train;
+      const type = this.getTrainType(data, tr.typeId);
+      const timeColor = type.timeColor || "#000000";
+      if (item.hasDep && tr.depTime) {
+        timeCandidates.push({ x: item.x1, text: tr.depTime, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "dep" });
+      }
+      if (item.hasArr && tr.arrTime) {
+        timeCandidates.push({ x: item.x2, text: tr.arrTime, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "arr" });
+      }
+    }
+
+    const timeRow1 = [];
+    const timeRow2 = [];
+    const timeY1 = round2(laneY + 22.0);
+    const timeY2 = round2(laneY + 30.2);
+    let prevAcceptedTimeCand = null;
+
+    for (let i = 0; i < timeCandidates.length; i++) {
+      const cand = timeCandidates[i];
+      if (
+        prevAcceptedTimeCand &&
+        prevAcceptedTimeCand.text === cand.text &&
+        Math.abs(prevAcceptedTimeCand.rawX - cand.x) < 4.0
+      ) {
+        continue;
+      }
+      const fSize = 8.8;
+      const w = this._estimateTextWidth(cand.text, fSize);
+      const halfW = w / 2;
+      let cx = Math.max(plotLeft - 24 + halfW, Math.min(plotRight + 24 - halfW, cand.x));
+      if (cand.isShortSpan) {
+        cx = cand.side === "dep"
+          ? Math.max(plotLeft - 24 + halfW, cand.x - 4.0)
+          : Math.min(plotRight + 24 - halfW, cand.x + 4.0);
+      }
+      const left = cx - halfW;
+      const right = cx + halfW;
+
+      if (this._canPlaceHorizontalSpan(timeRow1, left, right, 2.0)) {
+        timeRow1.push({ left, right });
+        prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
+        elements.push(`
+          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY1.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+        `);
+      } else if (this._canPlaceHorizontalSpan(timeRow2, left, right, 2.0)) {
+        timeRow2.push({ left, right });
+        prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
+        elements.push(`
+          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+        `);
+      } else if (density === "full") {
+        // 全表示モードは段2の交互配置を強行して表示し衝突を記録
+        timeRow2.push({ left, right });
+        prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
+        if (diagAcc) diagAcc.labelOverlapCount++;
+        elements.push(`
+          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+        `);
+      } else {
+        if (diagAcc) diagAcc.omittedTimeLabelCount++;
+      }
+    }
+  }
+
+  /**
+   * 描画結果の余白・密度を評価して、はみ出し／過密解消向けの用紙提案を生成
+   */
+  buildLayoutDiagnostics(data, geom, timeRange, totalPages, diagAcc) {
+    const visibleStations = (data.stations || []).filter(s => s.visible !== false);
+    const diag = {
+      xAxisMode: geom.xAxisMode,
+      pageSize: geom.pageSize,
+      orientation: geom.orientation,
+      isSeparateMode: geom.isSeparateMode,
+      totalPages,
+      omittedTimeLabelCount: diagAcc.omittedTimeLabelCount,
+      multiLaneRosterCount: diagAcc.multiLaneRosterCount,
+      labelOverlapCount: diagAcc.labelOverlapCount,
+      visibleStationCount: visibleStations.length,
+      pxPerHour: null,
+      stationMinGapPx: null,
+      suggestion: null
+    };
+
+    const nextBiggerSize = (sz) => {
+      const order = ["B6", "A5", "B5", "A4", "B4", "A3"];
+      const idx = order.indexOf(sz);
+      return (idx >= 0 && idx < order.length - 1) ? order[idx + 1] : null;
+    };
+
+    if (geom.xAxisMode === "time" && timeRange) {
+      const hours = Math.max(1, timeRange.endHour - timeRange.startHour);
+      const pxPerHour = (geom.timePlotRight - geom.timePlotLeft) / hours;
+      diag.pxPerHour = Math.round(pxPerHour * 10) / 10;
+
+      if (!geom.isLandscape && (pxPerHour < 58 || diagAcc.omittedTimeLabelCount > 0 || diagAcc.labelOverlapCount > 0 || geom.canvasScale < 0.9)) {
+        const actions = [
+          {
+            id: "set-time-a4-landscape",
+            label: "時間軸だけ A4横 にする（推奨）",
+            patch: { separatePageSettingsByAxisMode: true, timeAxisPageSize: "A4", timeAxisOrientation: "landscape" }
+          },
+          {
+            id: "set-orientation-landscape",
+            label: "共通向きを 横 に変更",
+            patch: geom.isSeparateMode ? { timeAxisOrientation: "landscape" } : { orientation: "landscape" }
+          }
+        ];
+        if (diagAcc.omittedTimeLabelCount >= 4 || pxPerHour < 40) {
+          actions.push({
+            id: "set-time-a3-landscape",
+            label: "A3横 にする",
+            patch: { separatePageSettingsByAxisMode: true, timeAxisPageSize: "A3", timeAxisOrientation: "landscape" }
+          });
+        }
+        diag.suggestion = {
+          key: `time-portrait-narrow-${geom.pageSize}-${geom.orientation}`,
+          message: `縦向き用紙では横幅がやや狭く（1時間あたり約 ${Math.round(pxPerHour)}px${diagAcc.omittedTimeLabelCount > 0 ? `・過密により時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : ""}）、文字が詰まりやすい状態です。横向き用紙をおすすめします。`,
+          actions
+        };
+      } else if (diagAcc.omittedTimeLabelCount >= 3 || diagAcc.labelOverlapCount >= 2 || pxPerHour < 50) {
+        const bigger = nextBiggerSize(geom.pageSize);
+        if (bigger) {
+          const patch = geom.isSeparateMode
+            ? { timeAxisPageSize: bigger }
+            : { pageSize: bigger };
+          diag.suggestion = {
+            key: `time-size-crowded-${geom.pageSize}-${geom.orientation}`,
+            message: `短区間列車や運行時間帯が長く表示が過密です（${diagAcc.omittedTimeLabelCount > 0 ? `時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : `約 ${Math.round(pxPerHour)}px/時間`}）。用紙を ${bigger} に広げると余裕をもって表示できます。`,
+            actions: [
+              { id: `upgrade-to-${bigger}`, label: `${bigger} ${geom.isLandscape ? "横" : "縦"}にする`, patch }
+            ]
+          };
+        }
+      }
+    } else if (geom.xAxisMode === "station") {
+      if (visibleStations.length >= 2) {
+        const xs = visibleStations.map(s => this.mapStationXToCanvas(s.x, geom)).sort((a, b) => a - b);
+        let minGap = Infinity;
+        for (let i = 1; i < xs.length; i++) minGap = Math.min(minGap, xs[i] - xs[i - 1]);
+        diag.stationMinGapPx = Math.round(minGap * 10) / 10;
+
+        if ((geom.canvasScale < 0.9 && visibleStations.length >= 4) || (!geom.isLandscape && minGap < 120)) {
+          const actions = [];
+          if (!geom.isLandscape) {
+            actions.push({
+              id: "station-landscape",
+              label: "横向きにする",
+              patch: { orientation: "landscape" }
+            });
+          }
+          const bigger = nextBiggerSize(geom.pageSize);
+          if (bigger && (geom.pageSize === "B6" || geom.pageSize === "A5" || geom.pageSize === "A4" || geom.pageSize === "B5")) {
+            actions.push({
+              id: `station-size-${bigger}`,
+              label: `${bigger} にする`,
+              patch: { pageSize: bigger }
+            });
+          }
+          if (actions.length > 0) {
+            diag.suggestion = {
+              key: `station-crowded-${geom.pageSize}-${geom.orientation}-${visibleStations.length}`,
+              message: `表示駅数（${visibleStations.length}駅）に対して駅間隔がやや狭くなっています（最小間隔 約 ${Math.round(minGap)}px）。`,
+              actions
+            };
+          }
+        }
+      }
+    }
+
+    return diag;
+  }
+
   getTrainType(data, typeId) {
     if (data.trainTypes && Array.isArray(data.trainTypes)) {
       const t = data.trainTypes.find(x => x.id === typeId);
@@ -651,10 +1468,11 @@ class BoxDiagramRenderer {
   }
 
   renderEmptySvg(data) {
+    const geom = this.getPageGeometry(data || {});
     return `
-      <svg class="box-diagram-svg" viewBox="0 0 1122.56 1587.36" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-        <rect width="1122.56" height="1587.36" fill="#FFFFFF" />
-        <text x="561.28" y="793.68" font-size="20" fill="#999999" text-anchor="middle">表示可能な運用データがありません</text>
+      <svg class="box-diagram-svg" viewBox="0 0 ${geom.W} ${geom.H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+        <rect width="${geom.W}" height="${geom.H}" fill="#FFFFFF" />
+        <text x="${(geom.W / 2).toFixed(2)}" y="${(geom.H / 2).toFixed(2)}" font-size="20" fill="#999999" text-anchor="middle">表示可能な運用データがありません</text>
       </svg>
     `;
   }
