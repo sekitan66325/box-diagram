@@ -26,14 +26,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnUndo = document.getElementById("btnUndo");
   const btnRedo = document.getElementById("btnRedo");
   const btnExportJson = document.getElementById("btnExportJson");
-  const inputFileJson = document.getElementById("inputFileJson");
-  const inputFileOud = document.getElementById("inputFileOud");
+  const inputFileOpen = document.getElementById("inputFileOpen");
   const btnPrint = document.getElementById("btnPrint");
 
+  const mobileWorkspaceNav = document.getElementById("mobileWorkspaceNav");
   const splitter = document.getElementById("workspaceSplitter");
   const previewViewport = document.getElementById("previewViewport");
   const btnAxisStation = document.getElementById("btnAxisStation");
   const btnAxisTime = document.getElementById("btnAxisTime");
+  const btnToggleStationDir = document.getElementById("btnToggleStationDir");
   const selectQuickPageSize = document.getElementById("selectQuickPageSize");
   const btnQuickPortrait = document.getElementById("btnQuickPortrait");
   const btnQuickLandscape = document.getElementById("btnQuickLandscape");
@@ -48,9 +49,34 @@ document.addEventListener("DOMContentLoaded", () => {
   const pageIndicator = document.getElementById("pageIndicator");
   const checkShowAllPages = document.getElementById("checkShowAllPages");
   const selectZoom = document.getElementById("selectZoom");
+  const optZoomCustom = document.getElementById("optZoomCustom");
   const btnZoomIn = document.getElementById("btnZoomIn");
   const btnZoomOut = document.getElementById("btnZoomOut");
   const dynamicPrintStyle = document.getElementById("dynamic-print-style");
+
+  // モバイル表示切替 ("preview" | "editor") — 既定はプレビュー優先
+  function setMobileView(view) {
+    const next = view === "editor" ? "editor" : "preview";
+    document.body.dataset.mobileView = next;
+    if (mobileWorkspaceNav) {
+      mobileWorkspaceNav.querySelectorAll("[data-mobile-view]").forEach(btn => {
+        const active = btn.dataset.mobileView === next;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", String(active));
+      });
+    }
+    if (next === "preview") {
+      requestAnimationFrame(() => renderPreview());
+    }
+  }
+  setMobileView("preview");
+  if (mobileWorkspaceNav) {
+    mobileWorkspaceNav.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-mobile-view]");
+      if (!btn) return;
+      setMobileView(btn.dataset.mobileView);
+    });
+  }
 
   // アプリ状態
   let currentPageIndex = 1;
@@ -63,6 +89,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const PREVIEW_VIEW_SETTING_KEYS = [
     "xAxisMode",
+    "stationAxisDirection",
     "pageSize",
     "orientation",
     "separatePageSettingsByAxisMode",
@@ -147,6 +174,13 @@ document.addEventListener("DOMContentLoaded", () => {
       btnAxisTime.classList.toggle("active", cfg.xAxisMode === "time");
       btnAxisTime.setAttribute("aria-pressed", String(cfg.xAxisMode === "time"));
     }
+    if (btnToggleStationDir) {
+      const stationDir = (data && data.settings && data.settings.stationAxisDirection === "rtl") ? "rtl" : "ltr";
+      btnToggleStationDir.hidden = cfg.xAxisMode === "time";
+      btnToggleStationDir.classList.toggle("active", stationDir === "rtl");
+      btnToggleStationDir.textContent = stationDir === "rtl" ? "左右: 右→左" : "左右: 左→右";
+      btnToggleStationDir.setAttribute("aria-pressed", String(stationDir === "rtl"));
+    }
     if (selectQuickPageSize) {
       selectQuickPageSize.value = cfg.pageSize;
       selectQuickPageSize.title = (cfg.isSeparateMode && cfg.xAxisMode === "time")
@@ -205,7 +239,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const msgEl = document.createElement("div");
     msgEl.className = "layout-suggestion-msg";
     const iconSpan = document.createElement("span");
-    iconSpan.textContent = "💡";
+    iconSpan.className = "layout-suggestion-badge";
+    iconSpan.textContent = "提案";
     const textSpan = document.createElement("span");
     textSpan.textContent = sug.message;
     msgEl.appendChild(iconSpan);
@@ -399,6 +434,9 @@ document.addEventListener("DOMContentLoaded", () => {
         diagramRenderer.setSelection(rosterId, trainIdx);
         tableEditor.setActiveRoster(rosterId);
         tableEditor.setActiveTab("tab-trains");
+        if (window.innerWidth <= 900) {
+          setMobileView("editor");
+        }
 
         // 該当行へスクロール & ハイライト
         setTimeout(() => {
@@ -853,31 +891,48 @@ document.addEventListener("DOMContentLoaded", () => {
     URL.revokeObjectURL(url);
   });
 
-  // JSON インポート
-  inputFileJson.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  // 統合ファイルインポート (JSON / .oud / .oud2 自動判別)
+  function openOudBuffer(buffer, fileName) {
+    oudState.buffer = buffer;
+    oudState.fileName = fileName;
+    if (oudSelectEncoding) oudSelectEncoding.value = "auto";
+    reparseOudDocument();
+    openOudImportModal();
+  }
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
+  if (inputFileOpen) {
+    inputFileOpen.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
       try {
-        const parsed = JSON.parse(evt.target.result);
-        const val = dataModel.validateSchema(parsed);
-        if (!val.valid) {
-          alert(`インポート失敗:\n${val.errors.join("\n")}`);
-          return;
+        const lowerName = (file.name || "").toLowerCase();
+        const isOudExt = lowerName.endsWith(".oud") || lowerName.endsWith(".oud2");
+        if (isOudExt) {
+          openOudBuffer(await file.arrayBuffer(), file.name);
+        } else {
+          const text = (await file.text()).replace(/^\uFEFF/, "").trim();
+          if (text.startsWith("{") || text.startsWith("[") || lowerName.endsWith(".json")) {
+            const parsed = JSON.parse(text);
+            const val = dataModel.validateSchema(parsed);
+            if (!val.valid) {
+              alert(`インポート失敗:\n${val.errors.join("\n")}`);
+              return;
+            }
+            hasStickyPreviewSettings = false;
+            dataModel.load(parsed);
+            tableEditor.setActiveRoster(null);
+            alert(`JSONファイル「${file.name}」を読み込みました。`);
+          } else {
+            openOudBuffer(await file.arrayBuffer(), file.name);
+          }
         }
-        hasStickyPreviewSettings = false;
-        dataModel.load(parsed);
-        tableEditor.setActiveRoster(null);
-        alert(`JSONファイル「${file.name}」を読み込みました。`);
       } catch (err) {
-        alert(`ファイル解析エラー: ${err.message}`);
+        alert(`ファイル解析エラー:\n${err.message}`);
+      } finally {
+        inputFileOpen.value = "";
       }
-      inputFileJson.value = "";
-    };
-    reader.readAsText(file);
-  });
+    });
+  }
 
   // OuDia (.oud) / OuDiaSecond (.oud2) インポート制御
   const oudImportModalBackdrop = document.getElementById("oudImportModalBackdrop");
@@ -1084,23 +1139,6 @@ document.addEventListener("DOMContentLoaded", () => {
     refreshOudPreview();
   }
 
-  if (inputFileOud) {
-    inputFileOud.addEventListener("change", async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        oudState.buffer = await file.arrayBuffer();
-        oudState.fileName = file.name;
-        if (oudSelectEncoding) oudSelectEncoding.value = "auto";
-        reparseOudDocument();
-        openOudImportModal();
-      } catch (err) {
-        alert(`OuDiaファイル解析エラー:\n${err.message}`);
-      }
-      inputFileOud.value = "";
-    });
-  }
-
   if (oudSelectEncoding) {
     oudSelectEncoding.addEventListener("change", () => {
       try {
@@ -1196,6 +1234,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   }
+  if (btnToggleStationDir) {
+    btnToggleStationDir.addEventListener("click", () => {
+      hasStickyPreviewSettings = true;
+      const cur = dataModel.getSettings().stationAxisDirection === "rtl" ? "rtl" : "ltr";
+      const next = cur === "rtl" ? "ltr" : "rtl";
+      dataModel.updateSettings({ stationAxisDirection: next });
+    });
+  }
   if (selectQuickPageSize) {
     selectQuickPageSize.addEventListener("change", (e) => {
       hasStickyPreviewSettings = true;
@@ -1255,7 +1301,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const val = e.target.value;
     if (val === "fit" || val === "fit-width") {
       zoomMode = val;
-    } else {
+      if (optZoomCustom) {
+        optZoomCustom.hidden = true;
+        optZoomCustom.value = "";
+      }
+    } else if (val) {
       zoomMode = "manual";
       currentZoom = parseFloat(val) || 1.0;
     }
@@ -1264,14 +1314,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   btnZoomIn.addEventListener("click", () => {
     zoomMode = "manual";
-    currentZoom = Math.min(2.0, Math.round((appliedScale + 0.15) * 100) / 100);
+    currentZoom = Math.min(2.5, Math.round((appliedScale + 0.15) * 100) / 100);
     syncZoomSelect();
     renderPreview();
   });
 
   btnZoomOut.addEventListener("click", () => {
     zoomMode = "manual";
-    currentZoom = Math.max(0.3, Math.round((appliedScale - 0.15) * 100) / 100);
+    currentZoom = Math.max(0.2, Math.round((appliedScale - 0.15) * 100) / 100);
     syncZoomSelect();
     renderPreview();
   });
@@ -1279,14 +1329,115 @@ document.addEventListener("DOMContentLoaded", () => {
   function syncZoomSelect() {
     if (zoomMode === "fit") {
       selectZoom.value = "fit";
+      if (optZoomCustom) optZoomCustom.hidden = true;
     } else if (zoomMode === "fit-width") {
       selectZoom.value = "fit-width";
+      if (optZoomCustom) optZoomCustom.hidden = true;
     } else {
-      const opt = Array.from(selectZoom.options).find(o => Math.abs(parseFloat(o.value) - currentZoom) < 0.05);
-      if (opt) {
-        selectZoom.value = opt.value;
+      const presetOpt = Array.from(selectZoom.options).find(o => o !== optZoomCustom && o.value && Math.abs(parseFloat(o.value) - currentZoom) < 0.025);
+      if (presetOpt) {
+        if (optZoomCustom) optZoomCustom.hidden = true;
+        selectZoom.value = presetOpt.value;
+      } else if (optZoomCustom) {
+        const valStr = currentZoom.toFixed(2);
+        optZoomCustom.value = valStr;
+        optZoomCustom.textContent = `${Math.round(currentZoom * 100)}%`;
+        optZoomCustom.hidden = false;
+        selectZoom.value = valStr;
       }
     }
+  }
+
+  // プレビュー上のマウスホイール拡大縮小（カーソル位置基準）＋余白ドラッグパン
+  if (previewViewport) {
+    previewViewport.addEventListener("wheel", (e) => {
+      if (!dataModel.getData()) return;
+      if (Math.abs(e.deltaY) < 0.5 && Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+
+      const wrappers = Array.from(previewViewport.querySelectorAll(".preview-page-wrapper"));
+      if (wrappers.length === 0) return;
+
+      let targetIdx = 0;
+      let bestDist = Infinity;
+      wrappers.forEach((w, idx) => {
+        const r = w.getBoundingClientRect();
+        if (e.clientY >= r.top && e.clientY <= r.bottom && e.clientX >= r.left && e.clientX <= r.right) {
+          targetIdx = idx;
+          bestDist = 0;
+        } else if (bestDist > 0) {
+          const cy = (r.top + r.bottom) / 2;
+          const cx = (r.left + r.right) / 2;
+          const d = Math.hypot(e.clientX - cx, e.clientY - cy);
+          if (d < bestDist) {
+            bestDist = d;
+            targetIdx = idx;
+          }
+        }
+      });
+
+      const anchorWrapper = wrappers[targetIdx];
+      const oldRect = anchorWrapper.getBoundingClientRect();
+      const fx = oldRect.width > 0 ? (e.clientX - oldRect.left) / oldRect.width : 0.5;
+      const fy = oldRect.height > 0 ? (e.clientY - oldRect.top) / oldRect.height : 0.5;
+
+      const baseScale = appliedScale || 1.0;
+      const factor = e.deltaY < 0 ? 1.1 : (1 / 1.1);
+      const nextScale = Math.max(0.2, Math.min(2.5, Math.round(baseScale * factor * 100) / 100));
+      if (Math.abs(nextScale - baseScale) < 0.005) return;
+
+      zoomMode = "manual";
+      currentZoom = nextScale;
+      syncZoomSelect();
+      renderPreview();
+
+      const newWrappers = previewViewport.querySelectorAll(".preview-page-wrapper");
+      const nextWrapper = newWrappers[targetIdx] || newWrappers[0];
+      if (nextWrapper) {
+        const newRect = nextWrapper.getBoundingClientRect();
+        const targetClientX = newRect.left + fx * newRect.width;
+        const targetClientY = newRect.top + fy * newRect.height;
+        previewViewport.scrollLeft += (targetClientX - e.clientX);
+        previewViewport.scrollTop += (targetClientY - e.clientY);
+      }
+    }, { passive: false });
+
+    let viewportPanState = null;
+    previewViewport.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      if (e.target.closest(".diagram-note") || e.target.closest(".train-line-group")) return;
+      if (
+        previewViewport.scrollWidth <= previewViewport.clientWidth + 2 &&
+        previewViewport.scrollHeight <= previewViewport.clientHeight + 2
+      ) {
+        return;
+      }
+      viewportPanState = {
+        startX: e.clientX,
+        startY: e.clientY,
+        scrollLeft: previewViewport.scrollLeft,
+        scrollTop: previewViewport.scrollTop,
+        moved: false
+      };
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!viewportPanState) return;
+      const dx = e.clientX - viewportPanState.startX;
+      const dy = e.clientY - viewportPanState.startY;
+      if (!viewportPanState.moved && Math.hypot(dx, dy) < 4) return;
+      viewportPanState.moved = true;
+      previewViewport.classList.add("is-panning");
+      previewViewport.scrollLeft = viewportPanState.scrollLeft - dx;
+      previewViewport.scrollTop = viewportPanState.scrollTop - dy;
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (viewportPanState) {
+        viewportPanState = null;
+        previewViewport.classList.remove("is-panning");
+      }
+    });
   }
 
   window.addEventListener("resize", () => {

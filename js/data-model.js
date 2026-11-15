@@ -31,6 +31,79 @@ class BoxDiagramDataModel {
     };
   }
 
+  // フォントプリセット定義（部位別・注記個別指定で共通利用）
+  static get FONT_PRESETS() {
+    return {
+      F1: {
+        id: "F1",
+        label: "Ｐゴシック（標準）",
+        css: '"MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif'
+      },
+      F2: {
+        id: "F2",
+        label: "明朝（時刻標準）",
+        css: '"MS Mincho", "ＭＳ 明朝", serif'
+      },
+      F3: {
+        id: "F3",
+        label: "ゴシック（等幅）",
+        css: '"MS Gothic", "ＭＳ ゴシック", monospace'
+      },
+      YUGOTHIC: {
+        id: "YUGOTHIC",
+        label: "游ゴシック",
+        css: '"Yu Gothic", "YuGothic", "游ゴシック体", sans-serif'
+      },
+      YUMINCHO: {
+        id: "YUMINCHO",
+        label: "游明朝",
+        css: '"Yu Mincho", "YuMincho", "游明朝体", serif'
+      },
+      MEIRYO: {
+        id: "MEIRYO",
+        label: "メイリオ",
+        css: '"Meiryo", "メイリオ", sans-serif'
+      },
+      BIZ_GOTHIC: {
+        id: "BIZ_GOTHIC",
+        label: "BIZ UDゴシック",
+        css: '"BIZ UDPGothic", "BIZ UDGothic", "Meiryo", sans-serif'
+      },
+      BIZ_MINCHO: {
+        id: "BIZ_MINCHO",
+        label: "BIZ UD明朝",
+        css: '"BIZ UDPMincho", "BIZ UDMincho", "Yu Mincho", serif'
+      },
+      CONSOLAS: {
+        id: "CONSOLAS",
+        label: "Consolas / 等幅数字",
+        css: '"Consolas", "SFMono-Regular", "MS Gothic", monospace'
+      }
+    };
+  }
+
+  static get DEFAULT_ELEMENT_FONTS() {
+    return {
+      header: "F1",
+      station: "F1",
+      roster: "F1",
+      trainNo: "F1",
+      time: "F2"
+    };
+  }
+
+  static normalizeFontId(fontId, fallback = "F1") {
+    const presets = BoxDiagramDataModel.FONT_PRESETS;
+    if (typeof fontId === "string" && presets[fontId]) return fontId;
+    return presets[fallback] ? fallback : "F1";
+  }
+
+  static resolveFontCss(fontId, fallback = "F1") {
+    const presets = BoxDiagramDataModel.FONT_PRESETS;
+    const key = BoxDiagramDataModel.normalizeFontId(fontId, fallback);
+    return (presets[key] && presets[key].css) || presets.F1.css;
+  }
+
   static clampCustomMm(val, fallback, minMm = 80, maxMm = 1800) {
     const num = typeof val === "number" ? val : parseFloat(val);
     if (!Number.isFinite(num)) return fallback;
@@ -189,6 +262,15 @@ class BoxDiagramDataModel {
     const normLateFmt = ["24plus", "zero", "yoku"].includes(rawSet.timeAxisLateNightFormat)
       ? rawSet.timeAxisLateNightFormat
       : "24plus";
+    const defaultFonts = BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS;
+    const rawFonts = (rawSet.fonts && typeof rawSet.fonts === "object") ? rawSet.fonts : {};
+    const normFonts = {
+      header: BoxDiagramDataModel.normalizeFontId(rawFonts.header, defaultFonts.header),
+      station: BoxDiagramDataModel.normalizeFontId(rawFonts.station, defaultFonts.station),
+      roster: BoxDiagramDataModel.normalizeFontId(rawFonts.roster, defaultFonts.roster),
+      trainNo: BoxDiagramDataModel.normalizeFontId(rawFonts.trainNo, defaultFonts.trainNo),
+      time: BoxDiagramDataModel.normalizeFontId(rawFonts.time, defaultFonts.time)
+    };
 
     const d = {
       version: raw.version || "2.0",
@@ -206,12 +288,14 @@ class BoxDiagramDataModel {
         partialConnectStepRows: 1,
         blockPaddingRows: 2,
         stationHeaderDirection: "vertical", // "vertical" | "horizontal"
+        stationAxisDirection: "ltr", // "ltr" | "rtl"
         subHeaderMode: "omitFirst",
         selfHighlightStyle: "red",
         showLegend: false,
         symbolScale: 1.0,
         symbolFill: "preset",
         autoSyncCoupled: true,
+        fonts: normFonts,
         xAxisMode: "station",
         separatePageSettingsByAxisMode: normSeparatePage,
         timeAxisPageSize: normTimePageSize,
@@ -229,6 +313,8 @@ class BoxDiagramDataModel {
       }, rawSet, {
         pageSize: normPageSize,
         orientation: rawSet.orientation === "landscape" ? "landscape" : "portrait",
+        stationAxisDirection: rawSet.stationAxisDirection === "rtl" ? "rtl" : "ltr",
+        fonts: normFonts,
         xAxisMode: rawSet.xAxisMode === "time" ? "time" : "station",
         separatePageSettingsByAxisMode: normSeparatePage,
         timeAxisPageSize: normTimePageSize,
@@ -240,7 +326,7 @@ class BoxDiagramDataModel {
         timeAxisStartHour: normStartHour,
         timeAxisRangeMode: rawSet.timeAxisRangeMode === "manual" ? "manual" : "auto",
         timeAxisEndHour: normEndHour,
-        timeAxisGridMinutes: rawSet.timeAxisGridMinutes === 60 ? 60 : 30,
+        timeAxisGridMinutes: [10, 15, 30, 60].includes(rawSet.timeAxisGridMinutes) ? rawSet.timeAxisGridMinutes : 30,
         timeAxisLateNightFormat: normLateFmt,
         timeAxisLabelDensity: rawSet.timeAxisLabelDensity === "full" ? "full" : "auto",
         autoSyncCoupled: typeof rawSet.autoSyncCoupled === "boolean" ? rawSet.autoSyncCoupled : true,
@@ -316,7 +402,7 @@ class BoxDiagramDataModel {
         y: typeof n.y === "number" ? n.y : 300,
         color: n.color || "#FF0000",
         fontSize: typeof n.fontSize === "number" ? n.fontSize : 10.72,
-        font: n.font || "F1"
+        font: BoxDiagramDataModel.normalizeFontId(n.font, "F1")
       })) : []
     };
 
@@ -431,18 +517,35 @@ class BoxDiagramDataModel {
   }
 
   updateSettings(patch) {
-    if (!this.data) return;
+    if (!this.data || !patch) return;
+    const normalizedPatch = Object.assign({}, patch);
     let hasDiff = false;
-    for (const key of Object.keys(patch)) {
-      if (this.data.settings[key] !== patch[key]) {
+    for (const key of Object.keys(normalizedPatch)) {
+      if (key === "fonts" && normalizedPatch.fonts && typeof normalizedPatch.fonts === "object") {
+        const curFonts = Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS, this.data.settings.fonts || {});
+        const nextFonts = Object.assign({}, curFonts);
+        let fontChanged = false;
+        for (const fk of Object.keys(normalizedPatch.fonts)) {
+          const val = BoxDiagramDataModel.normalizeFontId(normalizedPatch.fonts[fk], curFonts[fk] || "F1");
+          if (nextFonts[fk] !== val) {
+            nextFonts[fk] = val;
+            fontChanged = true;
+          }
+        }
+        if (fontChanged) {
+          normalizedPatch.fonts = nextFonts;
+          hasDiff = true;
+        } else {
+          delete normalizedPatch.fonts;
+        }
+      } else if (this.data.settings[key] !== normalizedPatch[key]) {
         hasDiff = true;
-        break;
       }
     }
     if (!hasDiff) return;
     this.mutate("settings-update", () => {
-      Object.assign(this.data.settings, patch);
-    }, { patch });
+      Object.assign(this.data.settings, normalizedPatch);
+    }, { patch: normalizedPatch });
   }
 
   // ==================== 駅マスタ ====================

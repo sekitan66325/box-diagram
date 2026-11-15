@@ -74,14 +74,9 @@
           保存 (JSON)
         </button>
 
-        <label class="btn btn-sm btn-secondary" title="JSONファイルを読み込んで反映">
-          読込 (JSON)
-          <input type="file" id="inputFileJson" accept=".json" style="display: none;">
-        </label>
-
-        <label class="btn btn-sm btn-secondary" title="OuDia (.oud) / OuDiaSecond (.oud2) ファイルを読み込んで変換">
-          読込 (.oud/.oud2)
-          <input type="file" id="inputFileOud" accept=".oud,.oud2" style="display: none;">
+        <label class="btn btn-sm btn-secondary" title="JSON または OuDia (.oud/.oud2) ファイルを読み込む">
+          読込 (JSON/.oud)
+          <input type="file" id="inputFileOpen" accept=".json,.oud,.oud2" style="display: none;">
         </label>
 
         <!-- 印刷 / PDF出力 -->
@@ -91,15 +86,21 @@
 
         <!-- 使い方・ヘルプ -->
         <button id="btnHelp" class="btn btn-sm btn-secondary" title="使い方・仕様ガイドを開く (F1)">
-          ？ 使い方
+          使い方
         </button>
 
         <!-- お問い合わせ・ご意見フォーム -->
         <button id="btnFeedback" class="btn btn-sm btn-secondary" title="不具合報告・ご要望・お問い合わせフォームを開く">
-          ✉ お問い合わせ
+          お問い合わせ
         </button>
       </div>
     </header>
+
+    <!-- モバイル向け 表示切替バー（幅900px以下で表示） -->
+    <nav id="mobileWorkspaceNav" class="mobile-workspace-nav" aria-label="表示切替">
+      <button type="button" class="mobile-nav-btn active" data-mobile-view="preview" aria-pressed="true">図面プレビュー</button>
+      <button type="button" class="mobile-nav-btn" data-mobile-view="editor" aria-pressed="false">データ編集・設定</button>
+    </nav>
 
     <!-- メイン2ペイン領域 -->
     <div class="main-workspace">
@@ -120,6 +121,7 @@
               <button type="button" id="btnAxisStation" class="seg-btn active" title="横軸を駅順にする（標準箱ダイヤ）">駅</button>
               <button type="button" id="btnAxisTime" class="seg-btn" title="横軸を時刻にする（運用線図／棒ダイヤ）">時刻</button>
             </div>
+            <button type="button" id="btnToggleStationDir" class="btn btn-xs btn-secondary" title="上り・下りの向き（駅軸の左右方向）を切り替えます">左右: 左→右</button>
             <select id="selectQuickPageSize" class="form-select preview-quick-size" title="現在の表示モードに適用する用紙サイズ">
               <option value="AUTO">変形 (自動)</option>
               <option value="CUSTOM">変形 (手動)</option>
@@ -157,17 +159,19 @@
 
           <div class="preview-controls-group">
             <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ズーム:</span>
-            <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小 (Ctrl + -)">−</button>
-            <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;">
+            <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小">−</button>
+            <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;" title="表示倍率を選択（プレビュー上でマウスホイールでも拡大・縮小可能）">
               <option value="fit-width" selected>横幅フィット</option>
               <option value="fit">全体表示</option>
+              <option id="optZoomCustom" value="" hidden></option>
               <option value="0.5">50%</option>
               <option value="0.75">75%</option>
               <option value="1.0">100%</option>
               <option value="1.25">125%</option>
               <option value="1.5">150%</option>
+              <option value="2.0">200%</option>
             </select>
-            <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大 (Ctrl + +)">＋</button>
+            <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大">＋</button>
           </div>
         </div>
 
@@ -250,7 +254,7 @@
             <tbody>
               <tr>
                 <td><strong>列車表</strong></td>
-                <td>運用を選択し、列車番号・種別・発駅/発時刻・着駅/着時刻・併結・発着記号・段下げ行数(<code>行</code>: <code>0</code>〜<code>10</code>) を表形式で編集します。<code>＋ 継走列車追加</code> や行操作の <code>✂</code>（途中駅分割）では列車番号・種別を引き継いで途中駅部分継走（標準<code>1</code>行・基本設定で<code>0</code>行も選択可）を作成できます。併結欄では相手運用と連結位置（<code>後(自+相)</code> / <code>前(相+自)</code>）、<code>⚙</code>（3両以上の詳細編成順設定）、<code>✎</code>（自由記述）を選択でき、<code>⚡ 併結自動同期</code>（および<code>🔗 相手へ一括同期</code>）により相手運用の列車着発情報も同期できます。</td>
+                <td>運用を選択し、列車番号・種別・発駅/発時刻・着駅/着時刻・併結・発着記号・段下げ行数(<code>行</code>: <code>0</code>〜<code>10</code>) を表形式で編集します。<code>＋ 継走列車追加</code> や行操作の <code>分割</code>（途中駅分割）では列車番号・種別を引き継いで途中駅部分継走（標準<code>1</code>行・基本設定で<code>0</code>行も選択可）を作成できます。併結欄では相手運用と連結位置（<code>後(自+相)</code> / <code>前(相+自)</code>）、<code>編</code>（3両以上の詳細編成順設定）、<code>文</code>（自由記述）を選択でき、<code>併結自動同期</code>（および<code>相手へ一括同期</code>）により相手運用の列車着発情報も同期できます。</td>
               </tr>
               <tr>
                 <td><strong>運用一覧</strong></td>
@@ -258,7 +262,7 @@
               </tr>
               <tr>
                 <td><strong>種別マスタ</strong></td>
-                <td>普通・回送・SL・快速などの列車種別ごとに、ダイヤ線色・時刻色・列車番号色（カラーピッカー／HEX入力）・線種（実線／破線／点線）を自由に追加・設定できます。<code>🎨 パレット読込</code> から標準・JR東日本風・モノクロ印刷用へ一括切替も可能です。</td>
+                <td>普通・回送・SL・快速などの列車種別ごとに、ダイヤ線色・時刻色・列車番号色（カラーピッカー／HEX入力）・線種（実線／破線／点線）を自由に追加・設定できます。<code>配色プリセット</code> から標準・JR東日本風・モノクロ印刷用へ一括切替も可能です。</td>
               </tr>
               <tr>
                 <td><strong>駅マスタ</strong></td>
@@ -266,11 +270,11 @@
               </tr>
               <tr>
                 <td><strong>注記</strong></td>
-                <td>図面上に置く自由テキスト（運休注記など）のページ・配置先（駅軸 / 時刻軸）・文言・色・文字サイズ・X/Y座標を管理します。</td>
+                <td>図面上に置く自由テキスト（運休注記など）のページ・配置先（駅軸 / 時刻軸）・文言・色・文字サイズ・個別フォント・X/Y座標を管理します。</td>
               </tr>
               <tr>
                 <td><strong>基本設定</strong></td>
-                <td>図面タイトル・著作権表記、横軸描画モード（駅 / 時刻）、時間軸の開始時刻・範囲・目盛り・24時以降の表記規則、用紙サイズ（A3/B4/A4/B5/A5/B6）と向き（縦/横・モード別設定可）、改ページやレイアウト細目の微調整が行えます。</td>
+                <td>図面タイトル・著作権表記、横軸描画モード（駅 / 時刻）、駅軸の左右方向（左→右 / 右→左）、部位別フォント設定、時間軸の開始時刻・範囲・目盛り・24時以降の表記規則、用紙サイズ（変形自動/手動・A3/B4/A4/B5/A5/B6）と向き・改ページを設定できます。</td>
               </tr>
               <tr>
                 <td><strong>生JSON</strong></td>
@@ -364,7 +368,7 @@
             <div class="help-support-actions">
               <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">真岡鐵道 情報ポータル (sekitan66325.github.io) ↗</a>
               <a href="https://x.com/sekitan66325" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">X (@sekitan66325) ↗</a>
-              <a href="https://ofuse.me/sekitan66325" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">✉ OFUSE で応援レターを送る ↗</a>
+              <a href="https://ofuse.me/sekitan66325" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary">OFUSE で応援レターを送る ↗</a>
             </div>
           </div>
         </section>
@@ -375,7 +379,7 @@
           (C) 2026 <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="footer-portal-link">せきたん (sekitan66325.github.io) ↗</a> — 箱ダイヤ描画ソフト
         </span>
         <div class="modal-footer-actions">
-          <button id="btnOpenFeedbackFromHelp" type="button" class="btn btn-sm btn-secondary" title="アプリ内フォームでお問い合わせを送る">✉ お問い合わせ</button>
+          <button id="btnOpenFeedbackFromHelp" type="button" class="btn btn-sm btn-secondary" title="アプリ内フォームでお問い合わせを送る">お問い合わせ</button>
           <a href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary" title="Googleフォームを新しいタブで開く">フォームを別タブで開く ↗</a>
           <button id="btnCloseHelpFooter" class="btn btn-primary btn-sm">閉じる</button>
         </div>

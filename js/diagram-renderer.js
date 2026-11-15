@@ -231,6 +231,7 @@ class BoxDiagramRenderer {
       pageConfig: cfg,
       xAxisMode: cfg.xAxisMode,
       isSeparateMode: cfg.isSeparateMode,
+      stationAxisDirection: settings.stationAxisDirection === "rtl" ? "rtl" : "ltr",
       pageSize: cfg.pageSize,
       orientation: cfg.orientation,
       isLandscape,
@@ -359,11 +360,15 @@ class BoxDiagramRenderer {
    */
   mapStationXToCanvas(logicalX, geom) {
     if (!Number.isFinite(logicalX)) return geom.stationPlotLeft;
-    if (geom.isExactClassicA4B5Portrait) return logicalX;
+    const isRtl = geom.stationAxisDirection === "rtl";
+    if (geom.isExactClassicA4B5Portrait) {
+      return isRtl ? Math.round((200.32 + 987.52 - logicalX) * 100) / 100 : logicalX;
+    }
     const srcSpan = 987.52 - 200.32;
     const dstSpan = geom.stationPlotRight - geom.stationPlotLeft;
     const t = (logicalX - 200.32) / srcSpan;
-    return Math.round((geom.stationPlotLeft + t * dstSpan) * 100) / 100;
+    const mappedT = isRtl ? (1 - t) : t;
+    return Math.round((geom.stationPlotLeft + mappedT * dstSpan) * 100) / 100;
   }
 
   /**
@@ -379,13 +384,13 @@ class BoxDiagramRenderer {
     const copyText = data.metadata ? (data.metadata.copyright || "") : "";
 
     const headerChrome = `
-      <text class="font-f1" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>
-      <text class="font-f1" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>
+      <text class="font-f1 font-header" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>
+      <text class="font-f1 font-header" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>
       <!-- ヘッダー上枠線 -->
       <rect x="${tableLeft}" y="${headerTop}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
       <!-- ヘッダー下枠線 -->
       <rect x="${tableLeft}" y="${geom.headerBottom}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
-      <text class="font-f1" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">運用番号</text>
+      <text class="font-f1 font-header" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">運用番号</text>
     `;
 
     // 左右の外枠縦線 (表全体の高さをカバー)
@@ -398,6 +403,19 @@ class BoxDiagramRenderer {
       <!-- 右外枠線 -->
       <rect x="${tableRight}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
     `);
+
+    const resolveFontCss = (fontId, fallback = "F1") => {
+      if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.resolveFontCss) {
+        return BoxDiagramDataModel.resolveFontCss(fontId, fallback);
+      }
+      return '"MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif';
+    };
+    const normalizeFontId = (fontId, fallback = "F1") => {
+      if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.normalizeFontId) {
+        return BoxDiagramDataModel.normalizeFontId(fontId, fallback);
+      }
+      return fontId || fallback;
+    };
 
     // 注記テキスト (Notes) の描画（該当ページ・該当軸モードのみ描画）
     if (data.notes && data.notes.length > 0) {
@@ -414,10 +432,11 @@ class BoxDiagramRenderer {
         const noteY = Number.isFinite(n.y) ? n.y : 340.48;
         const noteColor = n.color || "#FF0000";
         const noteSize = Number.isFinite(n.fontSize) ? n.fontSize : 10.72;
+        const noteFontId = normalizeFontId(n.font, "F1");
 
         elements.push(`
           <g class="diagram-note" data-note-id="${this.escapeXml(n.id)}" transform="translate(${noteX.toFixed(2)}, ${noteY.toFixed(2)})" style="cursor: move;">
-            <text class="font-f1" x="0" y="0" font-size="${noteSize}" fill="${noteColor}">${this.escapeXml(n.text)}</text>
+            <text class="font-f1 font-preset-${this.escapeXml(noteFontId)}" x="0" y="0" font-size="${noteSize}" fill="${noteColor}">${this.escapeXml(n.text)}</text>
           </g>
         `);
       }
@@ -425,8 +444,29 @@ class BoxDiagramRenderer {
 
     // フッターページ番号
     elements.push(`
-      <text class="font-f1" x="${footerX}" y="${footerY}" font-size="13.28" fill="#000000" text-anchor="middle">${pageIndex}/${totalPages}</text>
+      <text class="font-f1 font-header" x="${footerX}" y="${footerY}" font-size="13.28" fill="#000000" text-anchor="middle">${pageIndex}/${totalPages}</text>
     `);
+
+    const rawFonts = (data && data.settings && data.settings.fonts) || {};
+    const fontHeaderCss = resolveFontCss(rawFonts.header, "F1");
+    const fontStationCss = resolveFontCss(rawFonts.station, "F1");
+    const fontSubStationCss = (rawFonts.station && rawFonts.station !== "F1")
+      ? fontStationCss
+      : resolveFontCss("F3", "F3");
+    const fontRosterCss = resolveFontCss(rawFonts.roster, "F1");
+    const fontTrainNoCss = resolveFontCss(rawFonts.trainNo, "F1");
+    const fontTimeCss = resolveFontCss(rawFonts.time, "F2");
+
+    const presetMap = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.FONT_PRESETS)
+      ? BoxDiagramDataModel.FONT_PRESETS
+      : {
+          F1: { css: resolveFontCss("F1", "F1") },
+          F2: { css: resolveFontCss("F2", "F2") },
+          F3: { css: resolveFontCss("F3", "F3") }
+        };
+    const presetRules = Object.keys(presetMap)
+      .map(k => `.font-preset-${k} { font-family: ${presetMap[k].css}; }`)
+      .join("\n            ");
 
     return `
       <svg class="box-diagram-svg" viewBox="0 0 ${W} ${H}" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
@@ -435,6 +475,13 @@ class BoxDiagramRenderer {
             .font-f1 { font-family: "MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif; }
             .font-f2 { font-family: "MS Mincho", "ＭＳ 明朝", serif; }
             .font-f3 { font-family: "MS Gothic", "ＭＳ ゴシック", monospace; }
+            .font-header { font-family: ${fontHeaderCss}; }
+            .font-station { font-family: ${fontStationCss}; }
+            .font-substation { font-family: ${fontSubStationCss}; }
+            .font-roster { font-family: ${fontRosterCss}; }
+            .font-trainno { font-family: ${fontTrainNoCss}; }
+            .font-time { font-family: ${fontTimeCss}; }
+            ${presetRules}
             .train-line-group { cursor: pointer; }
             .train-line-group:hover line { stroke-width: 2.2px; }
             .diagram-note:hover text { text-decoration: underline; }
@@ -483,7 +530,7 @@ class BoxDiagramRenderer {
       const name = st.name || "";
       if (stationHeaderDir === "horizontal") {
         elements.push(`
-          <text class="font-f1" x="${stX}" y="78.00" font-size="13.28" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
+          <text class="font-f1 font-station" x="${stX}" y="78.00" font-size="13.28" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
         `);
       } else {
         // 縦書きモード
@@ -492,24 +539,30 @@ class BoxDiagramRenderer {
           const char2 = name.length > 1 ? name[1] : "";
           if (name.length === 1) {
             elements.push(`
-              <text class="font-f1" x="${stX}" y="79.68" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="79.68" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
             `);
           } else {
             elements.push(`
-              <text class="font-f1" x="${stX}" y="71.52" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
-              <text class="font-f1" x="${stX}" y="87.84" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="71.52" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="87.84" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
             `);
           }
         } else {
+          // 3文字以上は枠内側の上下中央 (innerTop..innerBottom) を基準に均等・上下対称配置
           const len = name.length;
-          const startY = 62.00;
-          const endY = 89.00;
-          const stepY = (endY - startY) / (len - 1);
-          const fSize = Math.min(14.72, Math.max(9.0, 36.0 / len));
+          const innerTop = geom.headerTop + geom.borderWidth;
+          const innerBottom = geom.headerBottom;
+          const innerH = innerBottom - innerTop;
+          const boxCenterY = (innerTop + innerBottom) / 2;
+          const edgePad = Math.max(2.5, Math.min(4.6, 13.5 / len));
+          const fSize = Math.min(12.2, Math.max(6.8, (innerH - 2 * edgePad) / (len * 1.12)));
+          const spanCenters = Math.max(0, innerH - 2 * edgePad - fSize);
+          const startCenterY = boxCenterY - spanCenters / 2;
+          const stepY = spanCenters / (len - 1);
           for (let ci = 0; ci < len; ci++) {
-            const chY = startY + ci * stepY;
+            const chY = startCenterY + ci * stepY;
             elements.push(`
-              <text class="font-f1" x="${stX}" y="${chY.toFixed(2)}" font-size="${fSize.toFixed(1)}" fill="#000000" text-anchor="middle">${this.escapeXml(name[ci])}</text>
+              <text class="font-f1 font-station" x="${stX}" y="${chY.toFixed(2)}" font-size="${fSize.toFixed(1)}" fill="#000000" text-anchor="middle" dominant-baseline="central">${this.escapeXml(name[ci])}</text>
             `);
           }
         }
@@ -559,7 +612,7 @@ class BoxDiagramRenderer {
           // テキスト基準線は線の上 1.76px
           const textY = subHeaderLineY - 1.76;
           elements.push(`
-            <text class="font-f3" x="${stX}" y="${textY.toFixed(2)}" font-size="10.72" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
+            <text class="font-f3 font-substation" x="${stX}" y="${textY.toFixed(2)}" font-size="10.72" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
           `);
         }
 
@@ -597,7 +650,7 @@ class BoxDiagramRenderer {
       // Y座標: (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32
       const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
       elements.push(`
-        <text class="font-f1" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
+        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
       `);
 
       // 列車と折り返し線を描画
@@ -627,8 +680,8 @@ class BoxDiagramRenderer {
               const vY1 = prevItem.y;
               const vY2 = yTop + 1.28;
               const vX = fromX - 0.64;
-              // 折り返し線の色（自身が回送または前が回送なら回送色）
-              const vColor = (tr.typeId === "deadhead" || prevTr.typeId === "deadhead") ? (type.lineColor || "#E3702E") : "#000000";
+              // 折り返し接続線は後続列車の種別色に合わせて自然に接続する
+              const vColor = lineColor || "#000000";
               elements.push(`
                 <rect x="${vX.toFixed(2)}" y="${vY1.toFixed(2)}" width="1.28" height="${(vY2 - vY1).toFixed(2)}" fill="${vColor}" />
               `);
@@ -647,10 +700,12 @@ class BoxDiagramRenderer {
         // 破線スタイル
         const dashAttr = type.lineStyle === "dashed" ? `stroke-dasharray="6,3"` : (type.lineStyle === "dotted" ? `stroke-dasharray="2,2"` : ``);
 
+        const hitW = Math.max(maxX - minX, 6);
         elements.push(`
           <g class="train-line-group ${isSelected ? 'selected' : ''}" data-roster-id="${this.escapeXml(roster.id)}" data-train-index="${k}">
             ${isSelected ? `<line x1="${minX.toFixed(2)}" y1="${(yTop + 0.64).toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${(yTop + 0.64).toFixed(2)}" ${selectedGlow} />` : ''}
             <line x1="${minX.toFixed(2)}" y1="${(yTop + 0.64).toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${(yTop + 0.64).toFixed(2)}" stroke="${lineColor}" stroke-width="1.28" ${dashAttr} />
+            ${this.options.interactive ? `<rect x="${minX.toFixed(2)}" y="${(yTop + 0.64 - 5).toFixed(2)}" width="${hitW.toFixed(2)}" height="10" fill="transparent" />` : ''}
           </g>
         `);
 
@@ -676,13 +731,13 @@ class BoxDiagramRenderer {
 
         if (tr.depTime) {
           elements.push(`
-            <text class="font-f2" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.depTime)}</text>
+            <text class="font-f2 font-time" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.depTime)}</text>
           `);
         }
 
         if (tr.arrTime) {
           elements.push(`
-            <text class="font-f2" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.arrTime)}</text>
+            <text class="font-f2 font-time" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.arrTime)}</text>
           `);
         }
 
@@ -698,12 +753,12 @@ class BoxDiagramRenderer {
         if (isDown) {
           const labelX = fromX + 80.80 * labelOffsetScale;
           elements.push(`
-            <text class="font-f1" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="start">${labelHtml}</text>
+            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="start">${labelHtml}</text>
           `);
         } else {
           const labelX = fromX - 84.00 * labelOffsetScale;
           elements.push(`
-            <text class="font-f1" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="end">${labelHtml}</text>
+            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="end">${labelHtml}</text>
           `);
         }
 
@@ -1122,7 +1177,7 @@ class BoxDiagramRenderer {
       if ((h - timeRange.startHour) % hourStep === 0) {
         const lbl = this.formatHourTickLabel(h, lateFmt);
         elements.push(`
-          <text class="font-f1" x="${hx}" y="79.20" font-size="${tickFontSize}" fill="#000000" text-anchor="middle">${this.escapeXml(lbl)}</text>
+          <text class="font-f1 font-station" x="${hx}" y="79.20" font-size="${tickFontSize}" fill="#000000" text-anchor="middle">${this.escapeXml(lbl)}</text>
         `);
       }
       if (gridMin === 30 && h < timeRange.endHour) {
@@ -1162,7 +1217,7 @@ class BoxDiagramRenderer {
           const hx = timeToX(h * 60);
           const lbl = this.formatHourTickLabel(h, lateFmt);
           elements.push(`
-            <text class="font-f3" x="${hx}" y="${(subHeaderLineY - 1.76).toFixed(2)}" font-size="9.6" fill="#334155" text-anchor="middle">${this.escapeXml(lbl)}</text>
+            <text class="font-f3 font-substation" x="${hx}" y="${(subHeaderLineY - 1.76).toFixed(2)}" font-size="9.6" fill="#334155" text-anchor="middle">${this.escapeXml(lbl)}</text>
           `);
         }
         elements.push(`
@@ -1199,7 +1254,7 @@ class BoxDiagramRenderer {
       // 運用番号（左列中央）
       const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
       elements.push(`
-        <text class="font-f1" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
+        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
       `);
 
       // 各レーン描画
@@ -1332,7 +1387,7 @@ class BoxDiagramRenderer {
 
       const labelHtml = this.formatTrainLabelHtml(tr, roster.id, highlightStyle, textColor);
       elements.push(`
-        <text class="font-f1" x="${midX.toFixed(2)}" y="${chosenY.toFixed(2)}" font-size="${fontSize}" text-anchor="middle">${labelHtml}</text>
+        <text class="font-f1 font-trainno" x="${midX.toFixed(2)}" y="${chosenY.toFixed(2)}" font-size="${fontSize}" text-anchor="middle">${labelHtml}</text>
       `);
     }
 
@@ -1397,7 +1452,7 @@ class BoxDiagramRenderer {
       abbrPlaced.push({ left: x - w / 2, right: x + w / 2 });
       const fwAttr = tok.bold ? `font-weight="700"` : "";
       elements.push(`
-        <text class="font-f1" x="${x.toFixed(2)}" y="${abbrY.toFixed(2)}" font-size="${fSize}" fill="${tok.color}" ${fwAttr} text-anchor="middle">${this.escapeXml(tok.text)}</text>
+        <text class="font-f1 font-station" x="${x.toFixed(2)}" y="${abbrY.toFixed(2)}" font-size="${fSize}" fill="${tok.color}" ${fwAttr} text-anchor="middle">${this.escapeXml(tok.text)}</text>
       `);
     }
 
@@ -1446,13 +1501,13 @@ class BoxDiagramRenderer {
         timeRow1.push({ left, right });
         prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
         elements.push(`
-          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY1.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+          <text class="font-f2 font-time" x="${cx.toFixed(2)}" y="${timeY1.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
         `);
       } else if (this._canPlaceHorizontalSpan(timeRow2, left, right, 2.0)) {
         timeRow2.push({ left, right });
         prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
         elements.push(`
-          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+          <text class="font-f2 font-time" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
         `);
       } else if (density === "full") {
         // 全表示モードは段2の交互配置を強行して表示し衝突を記録
@@ -1460,7 +1515,7 @@ class BoxDiagramRenderer {
         prevAcceptedTimeCand = { text: cand.text, rawX: cand.x };
         if (diagAcc) diagAcc.labelOverlapCount++;
         elements.push(`
-          <text class="font-f2" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
+          <text class="font-f2 font-time" x="${cx.toFixed(2)}" y="${timeY2.toFixed(2)}" font-size="${fSize}" fill="${cand.color}" text-anchor="middle">${this.escapeXml(cand.text)}</text>
         `);
       } else {
         if (diagAcc) diagAcc.omittedTimeLabelCount++;

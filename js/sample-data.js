@@ -128,7 +128,7 @@ const PRESET_SAKURAGAWA_MAIN = {
         { trainNo: "104", typeId: "local", fromStation: "sakuragawa", depTime: "7:55", toStation: "kaedegaoka", arrTime: "8:26", coupledPartner: "A2", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_104", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "104", typeId: "local", fromStation: "kaedegaoka", depTime: "8:30", toStation: "aoyamaonsen", arrTime: "8:55", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 1 },
         { trainNo: "301", typeId: "express", fromStation: "aoyamaonsen", depTime: "9:15", toStation: "sakuragawa", arrTime: "9:48", coupledPartner: "A2", coupledPosition: "after", coupledFormation: ["A1", "A2", "B1"], customCoupled: "", coupleGroupId: "cg_demo_301", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "199", typeId: "deadhead", fromStation: "sakuragawa", depTime: "10:02", toStation: "kaedegaoka", arrTime: "10:20", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "198", typeId: "deadhead", fromStation: "sakuragawa", depTime: "10:02", toStation: "kaedegaoka", arrTime: "10:20", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -140,7 +140,7 @@ const PRESET_SAKURAGAWA_MAIN = {
         { trainNo: "100", typeId: "local", fromStation: "misakicho", depTime: "6:15", toStation: "aoyamaonsen", arrTime: "6:52", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle_filled", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "201", typeId: "rapid", fromStation: "aoyamaonsen", depTime: "7:05", toStation: "sakuragawa", arrTime: "7:42", coupledPartner: "A1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_201", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "104", typeId: "local", fromStation: "sakuragawa", depTime: "7:55", toStation: "kaedegaoka", arrTime: "8:26", coupledPartner: "A1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_104", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "105", typeId: "local", fromStation: "kaedegaoka", depTime: "8:35", toStation: "aoyamaonsen", arrTime: "9:02", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "106", typeId: "local", fromStation: "kaedegaoka", depTime: "8:35", toStation: "aoyamaonsen", arrTime: "9:02", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "301", typeId: "express", fromStation: "aoyamaonsen", depTime: "9:15", toStation: "sakuragawa", arrTime: "9:48", coupledPartner: "A1", coupledPosition: "before", coupledFormation: ["A1", "A2", "B1"], customCoupled: "", coupleGroupId: "cg_demo_301", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "110", typeId: "local", fromStation: "sakuragawa", depTime: "10:05", toStation: "misakicho", arrTime: "10:24", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
@@ -165,8 +165,8 @@ const PRESET_SAKURAGAWA_MAIN = {
       pageBreakAfter: false,
       trains: [
         { trainNo: "122", typeId: "local", fromStation: "sakuragawa", depTime: "7:02", toStation: "kaedegaoka", arrTime: "7:30", coupledPartner: "A3", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_demo_122", depSymbol: "circle_filled", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "134", typeId: "local", fromStation: "kaedegaoka", depTime: "14:15", toStation: "sakuragawa", arrTime: "14:43", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "135", typeId: "local", fromStation: "sakuragawa", depTime: "15:00", toStation: "kaedegaoka", arrTime: "15:28", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "133", typeId: "local", fromStation: "kaedegaoka", depTime: "14:15", toStation: "sakuragawa", arrTime: "14:43", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "134", typeId: "local", fromStation: "sakuragawa", depTime: "15:00", toStation: "kaedegaoka", arrTime: "15:28", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -186,10 +186,10 @@ const PRESET_SAKURAGAWA_MAIN = {
       customName: false,
       pageBreakAfter: false,
       trains: [
-        { trainNo: "8100", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8103", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "8101", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8002", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8001", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8102", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "PC1", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -198,10 +198,10 @@ const PRESET_SAKURAGAWA_MAIN = {
       customName: true,
       pageBreakAfter: false,
       trains: [
-        { trainNo: "8100", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8103", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "8101", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "9:20", toStation: "sakuragawa", arrTime: "9:52", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8100", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8002", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8001", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8102", typeId: "deadhead", fromStation: "sakuragawa", depTime: "16:02", toStation: "kaedegaoka", arrTime: "16:31", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_el_8103", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -210,8 +210,8 @@ const PRESET_SAKURAGAWA_MAIN = {
       customName: false,
       pageBreakAfter: false,
       trains: [
-        { trainNo: "8001", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "circle_filled", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "8002", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "8002", typeId: "express", fromStation: "sakuragawa", depTime: "10:30", toStation: "aoyamaonsen", arrTime: "11:48", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8001", depSymbol: "circle_filled", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "8001", typeId: "express", fromStation: "aoyamaonsen", depTime: "14:25", toStation: "sakuragawa", arrTime: "15:45", coupledPartner: "EL1", coupledPosition: "before", coupledFormation: ["EL1", "PC1", "EL2"], customCoupled: "", coupleGroupId: "cg_el_8002", depSymbol: "none", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -269,7 +269,7 @@ const PRESET_SAKURAGAWA_MAIN = {
         { trainNo: "511", typeId: "local", fromStation: "aoyamaonsen", depTime: "22:08", toStation: "sakuragawa", arrTime: "22:52", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "512", typeId: "local", fromStation: "sakuragawa", depTime: "23:10", toStation: "kaedegaoka", arrTime: "23:38", coupledPartner: "N3", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "cg_night_512", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "514", typeId: "local", fromStation: "kaedegaoka", depTime: "23:45", toStation: "aoyamaonsen", arrTime: "24:12", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "598", typeId: "deadhead", fromStation: "aoyamaonsen", depTime: "24:22", toStation: "kaedegaoka", arrTime: "24:48", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "597", typeId: "deadhead", fromStation: "aoyamaonsen", depTime: "24:22", toStation: "kaedegaoka", arrTime: "24:48", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     },
     {
@@ -291,8 +291,8 @@ const PRESET_SAKURAGAWA_MAIN = {
       trains: [
         { trainNo: "530", typeId: "express", fromStation: "sakuragawa", depTime: "22:30", toStation: "aoyamaonsen", arrTime: "23:06", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "none", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
         { trainNo: "531", typeId: "local", fromStation: "aoyamaonsen", depTime: "23:25", toStation: "kaedegaoka", arrTime: "23:54", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "none", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "532", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "1:10", toStation: "sakuragawa", arrTime: "1:36", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
-        { trainNo: "599", typeId: "trial", fromStation: "sakuragawa", depTime: "26:50", toStation: "kaedegaoka", arrTime: "27:15", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
+        { trainNo: "533", typeId: "deadhead", fromStation: "kaedegaoka", depTime: "1:10", toStation: "sakuragawa", arrTime: "1:36", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "triangle", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 },
+        { trainNo: "598", typeId: "trial", fromStation: "sakuragawa", depTime: "26:50", toStation: "kaedegaoka", arrTime: "27:15", coupledPartner: "", coupledPosition: "after", coupledFormation: null, customCoupled: "", coupleGroupId: "", depSymbol: "circle", arrSymbol: "triangle_filled", depTimePos: "auto", arrTimePos: "auto", stepRows: 2 }
       ]
     }
   ],
@@ -301,11 +301,11 @@ const PRESET_SAKURAGAWA_MAIN = {
       id: "note-p1-1",
       page: 1,
       axisMode: "station",
-      text: "※ 土休日は桜川〜楓ヶ丘間2両運転",
-      x: 758.0,
+      text: "※ 土休日は桜川〜楓ヶ丘2両 ／ 104(1行段差)・122(同段0行)",
+      x: 752.0,
       y: 266.72,
       color: "#FF0000",
-      fontSize: 10.72,
+      fontSize: 9.5,
       font: "F1"
     },
     {
@@ -323,7 +323,7 @@ const PRESET_SAKURAGAWA_MAIN = {
       id: "note-p3-1",
       page: 3,
       axisMode: "station",
-      text: "※ N1(505△→520○)・N4(531△→532○→599○)は入庫〜出庫のため垂直接続線なし",
+      text: "※ N1(505△→520○)・N4(531△→533○→598○)は入庫〜出庫のため垂直接続線なし",
       x: 202.40,
       y: 938.00,
       color: "#1E293B",

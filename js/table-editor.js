@@ -239,7 +239,7 @@ class BoxDiagramTableEditor {
 
     pop.innerHTML = `
       <div class="editor-popover-header">
-        <span>✂ 途中駅で継走分割</span>
+        <span>途中駅で継走分割</span>
         <button type="button" class="btn-icon-xs" data-split-close="1">✕</button>
       </div>
       ${candidates.length === 0 ? `
@@ -443,10 +443,10 @@ class BoxDiagramTableEditor {
         <div class="sync-toolbar-group">
           <label class="sync-toggle-label" title="ONのとき、併結列車の列車番号・種別・発着駅・時刻・連結順序を変更すると相手運用にも即時反映します">
             <input type="checkbox" id="checkAutoSyncCoupled" ${autoSync ? 'checked' : ''} />
-            <span>⚡ 併結自動同期</span>
+            <span>併結自動同期</span>
           </label>
           <button id="btnSyncCoupledAll" class="btn btn-sm btn-secondary" title="この運用の併結列車の着発情報・位置順序を相手運用へ一括反映（相手側の不足行も生成）">
-            🔗 相手へ一括同期
+            相手へ一括同期
           </button>
           ${this.lastSyncMessage ? `<span id="syncStatusBadge" class="sync-status-badge">${this.escapeXml(this.lastSyncMessage)}</span>` : ''}
         </div>
@@ -463,11 +463,11 @@ class BoxDiagramTableEditor {
               <th style="width: 42px;">発時刻</th>
               <th style="width: 48px;">着駅</th>
               <th style="width: 42px;">着時刻</th>
-              <th style="width: 128px;">併結 (相手/位置)</th>
+              <th style="width: 142px;">併結 (相手/位置)</th>
               <th style="width: 44px;">発記</th>
               <th style="width: 44px;">着記</th>
               <th style="width: 30px;" title="段下げ行数 (0行〜、標準2行)">行</th>
-              <th style="width: 78px;">操作</th>
+              <th style="width: 108px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -478,7 +478,7 @@ class BoxDiagramTableEditor {
 
       <div class="table-footer-info">
         <span>全 ${trains.length} 本</span>
-        <span class="text-muted" style="margin-left: 12px;">※ 「⚙」で3両以上の連結順序設定、「✂」で途中駅での継走分割ができます。</span>
+        <span class="text-muted" style="margin-left: 12px;">※ 「編」で3両以上の連結順序設定、「文」で自由記述、「分割」で途中駅での継走分割ができます。</span>
       </div>
     `;
   }
@@ -534,8 +534,8 @@ class BoxDiagramTableEditor {
           <button type="button" class="coupled-multi-badge" data-action="open-formation-popover" title="編成順序・連結位置を変更: (${this.escapeXml(formation.join('＋'))})">
             ${this.escapeXml(formation.join("＋"))}
           </button>
-          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">⚙</button>
-          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">✎</button>
+          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">編</button>
+          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">文</button>
         ` : `
           <select class="cell-select cell-select-sm" data-field="coupledPartner" style="flex: 1; min-width: 36px;">
             ${partnerOptions}
@@ -544,8 +544,8 @@ class BoxDiagramTableEditor {
             <option value="after" ${coupledPos === 'after' ? 'selected' : ''}>後(自+相)</option>
             <option value="before" ${coupledPos === 'before' ? 'selected' : ''}>前(相+自)</option>
           </select>
-          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">⚙</button>
-          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">✎</button>
+          <button type="button" class="btn-icon-xs" data-action="open-formation-popover" title="3両以上・詳細な編成順を設定">編</button>
+          <button type="button" class="btn-icon-xs" data-action="toggle-custom-coupled" title="自由記述を入力">文</button>
         `)}
       </div>
     `;
@@ -598,8 +598,8 @@ class BoxDiagramTableEditor {
           <input type="number" class="cell-input text-center font-mono" data-field="stepRows" value="${typeof train.stepRows === 'number' ? train.stepRows : 2}" min="0" max="10" />
         </td>
         <td class="action-cell">
-          <button class="btn-icon" data-action="split-train" title="途中駅で継走分割（部分継走）">✂</button>
-          <button class="btn-icon" data-action="dup-train" title="複製">📄</button>
+          <button class="btn-icon btn-icon-label" data-action="split-train" title="途中駅で継走分割（部分継走）">分割</button>
+          <button class="btn-icon btn-icon-label" data-action="dup-train" title="複製">複製</button>
           <button class="btn-icon text-danger" data-action="del-train" title="削除">✕</button>
           <button class="btn-icon" data-action="up-train" title="上へ移動" ${index === 0 ? 'disabled' : ''}>↑</button>
           <button class="btn-icon" data-action="down-train" title="下へ移動">↓</button>
@@ -654,8 +654,8 @@ class BoxDiagramTableEditor {
                   </label>
                 </td>
                 <td class="action-cell">
-                  <button class="btn btn-xs btn-secondary" data-action="edit-roster-trains">編集 ✏️</button>
-                  <button class="btn-icon" data-action="dup-roster" title="運用を複製">📄</button>
+                  <button class="btn btn-xs btn-secondary" data-action="edit-roster-trains">列車編集</button>
+                  <button class="btn-icon btn-icon-label" data-action="dup-roster" title="運用を複製">複製</button>
                   <button class="btn-icon text-danger" data-action="del-roster" title="運用を削除">✕</button>
                   <button class="btn-icon" data-action="up-roster" title="上へ移動" ${idx === 0 ? 'disabled' : ''}>↑</button>
                   <button class="btn-icon" data-action="down-roster" title="下へ移動" ${idx === rosters.length - 1 ? 'disabled' : ''}>↓</button>
@@ -681,7 +681,7 @@ class BoxDiagramTableEditor {
         <span class="section-title-sm">列車種別・配色マスタ (全 ${types.length} 件)</span>
         <div class="action-buttons">
           <div class="dropdown-inline">
-            <button id="btnPalettePresets" class="btn btn-sm btn-secondary">🎨 パレット読込 ▾</button>
+            <button id="btnPalettePresets" class="btn btn-sm btn-secondary">配色プリセット ▾</button>
             <div id="paletteMenu" class="dropdown-menu" style="display: none;">
               <a href="#" class="dropdown-item" data-palette="standard">標準 (普通:黒 / 回送:橙 / SL:青 / 快速:赤)</a>
               <a href="#" class="dropdown-item" data-palette="jr_east">JR東日本風 (各駅:黄緑 / 快速:橙 / 特急:赤)</a>
@@ -802,6 +802,18 @@ class BoxDiagramTableEditor {
     `;
   }
 
+  renderFontPresetOptions(selectedId, fallback = "F1") {
+    const presets = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.FONT_PRESETS)
+      ? BoxDiagramDataModel.FONT_PRESETS
+      : { F1: { id: "F1", label: "Ｐゴシック（標準）" }, F2: { id: "F2", label: "明朝（時刻標準）" }, F3: { id: "F3", label: "ゴシック（等幅）" } };
+    const norm = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.normalizeFontId)
+      ? BoxDiagramDataModel.normalizeFontId(selectedId, fallback)
+      : (selectedId || fallback);
+    return Object.values(presets).map(p => `
+      <option value="${this.escapeXml(p.id)}" ${p.id === norm ? 'selected' : ''}>${this.escapeXml(p.label)}</option>
+    `).join("");
+  }
+
   // ==================== 5. 注記 (Notes Tab) ====================
   renderNotesTab(data) {
     const notes = data.notes || [];
@@ -819,14 +831,15 @@ class BoxDiagramTableEditor {
         <table class="grid-table" id="notesGridTable">
           <thead>
             <tr>
-              <th style="width: 72px;">ページ</th>
-              <th style="width: 72px;">モード</th>
-              <th style="width: 155px;">テキスト内容</th>
-              <th style="width: 66px;">X (px)</th>
-              <th style="width: 66px;">Y (px)</th>
-              <th style="width: 106px;">文字色</th>
-              <th style="width: 60px;">サイズ</th>
-              <th style="width: 46px;">操作</th>
+              <th style="width: 68px;">ページ</th>
+              <th style="width: 68px;">モード</th>
+              <th style="width: 140px;">テキスト内容</th>
+              <th style="width: 56px;">X (px)</th>
+              <th style="width: 56px;">Y (px)</th>
+              <th style="width: 96px;">文字色</th>
+              <th style="width: 52px;">サイズ</th>
+              <th style="width: 110px;">フォント</th>
+              <th style="width: 40px;">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -867,6 +880,11 @@ class BoxDiagramTableEditor {
                 <td>
                   <input type="number" class="cell-input text-center font-mono" data-note-field="fontSize" value="${n.fontSize || 10.72}" step="0.5" />
                 </td>
+                <td>
+                  <select class="cell-select" data-note-field="font" title="この注記ボックス個別のフォント">
+                    ${this.renderFontPresetOptions(n.font || "F1", "F1")}
+                  </select>
+                </td>
                 <td class="action-cell">
                   <button class="btn-icon text-danger" data-action="del-note" title="削除">✕</button>
                 </td>
@@ -877,7 +895,7 @@ class BoxDiagramTableEditor {
         </table>
       </div>
       <div class="table-footer-info">
-        <span>※ 注記は「駅軸」「時刻軸」モードごとに分けて保持・描画されます。プレビュー上で直接ドラッグ（<strong>Altキー押下で列車線に自動吸着</strong>）して位置調整できます。</span>
+        <span>※ 注記は「駅軸」「時刻軸」モードごとに分けて保持・描画され、個別のフォントを指定できます。プレビュー上で直接ドラッグ（<strong>Altキー押下で列車線に自動吸着</strong>）して位置調整できます。</span>
       </div>
     `;
   }
@@ -891,6 +909,7 @@ class BoxDiagramTableEditor {
     const isManualTimeRange = set.timeAxisRangeMode === "manual";
     const startHour = typeof set.timeAxisStartHour === "number" ? set.timeAxisStartHour : 4;
     const endHour = typeof set.timeAxisEndHour === "number" ? set.timeAxisEndHour : 25;
+    const fonts = Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS, set.fonts || {});
 
     return `
       <div class="form-settings-container">
@@ -1062,12 +1081,21 @@ class BoxDiagramTableEditor {
 
         <div class="settings-group">
           <div class="group-title">スタイル・レイアウト規則</div>
-          <div class="form-row">
-            <label class="form-label">駅名ヘッダーの向き:</label>
-            <select class="form-select" id="selectStationHeaderDirection">
-              <option value="vertical" ${set.stationHeaderDirection !== 'horizontal' ? 'selected' : ''}>縦書き（2文字縦並び / 3文字以上均等配置）</option>
-              <option value="horizontal" ${set.stationHeaderDirection === 'horizontal' ? 'selected' : ''}>横書き（ヘッダー中央1行配置）</option>
-            </select>
+          <div class="form-row-grid">
+            <div class="form-col">
+              <label class="form-label">駅名ヘッダーの向き:</label>
+              <select class="form-select" id="selectStationHeaderDirection">
+                <option value="vertical" ${set.stationHeaderDirection !== 'horizontal' ? 'selected' : ''}>縦書き（2文字縦並び / 3文字以上均等配置）</option>
+                <option value="horizontal" ${set.stationHeaderDirection === 'horizontal' ? 'selected' : ''}>横書き（ヘッダー中央1行配置）</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">駅軸の左右方向（上り・下り向き）:</label>
+              <select class="form-select" id="selectStationAxisDirection">
+                <option value="ltr" ${set.stationAxisDirection !== 'rtl' ? 'selected' : ''}>左→右（標準: 起点駅が左端）</option>
+                <option value="rtl" ${set.stationAxisDirection === 'rtl' ? 'selected' : ''}>右→左（反転: 起点駅が右端）</option>
+              </select>
+            </div>
           </div>
           <div class="form-row">
             <label class="form-label">省略駅名行 (下 真 茂) の表示:</label>
@@ -1109,6 +1137,47 @@ class BoxDiagramTableEditor {
           </div>
         </div>
 
+        <div class="settings-group">
+          <div class="group-title">フォント設定（部位別）</div>
+          <div class="form-row-grid">
+            <div class="form-col">
+              <label class="form-label">見出し・タイトル・頁番号:</label>
+              <select class="form-select" id="selectFontHeader" data-font-role="header">
+                ${this.renderFontPresetOptions(fonts.header, "F1")}
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">駅名・省略駅名・時刻目盛り:</label>
+              <select class="form-select" id="selectFontStation" data-font-role="station">
+                ${this.renderFontPresetOptions(fonts.station, "F1")}
+              </select>
+            </div>
+          </div>
+          <div class="form-row-grid" style="margin-top: 8px;">
+            <div class="form-col">
+              <label class="form-label">運用番号（左列）:</label>
+              <select class="form-select" id="selectFontRoster" data-font-role="roster">
+                ${this.renderFontPresetOptions(fonts.roster, "F1")}
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">列車番号・併結表記:</label>
+              <select class="form-select" id="selectFontTrainNo" data-font-role="trainNo">
+                ${this.renderFontPresetOptions(fonts.trainNo, "F1")}
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">発着時刻:</label>
+              <select class="form-select" id="selectFontTime" data-font-role="time">
+                ${this.renderFontPresetOptions(fonts.time, "F2")}
+              </select>
+            </div>
+          </div>
+          <div class="text-muted" style="font-size: 11px; margin-top: 6px;">
+            ※ 注記テキストボックスは「注記」タブから注記ごとに個別フォントを指定できます。
+          </div>
+        </div>
+
         <div class="settings-group" style="border-top: 1px solid var(--border-color); padding-top: 16px; display: flex; justify-content: flex-end;">
           <button id="btnResetSettingsToDefaults" class="btn btn-sm btn-secondary">設定を初期値に戻す</button>
         </div>
@@ -1123,7 +1192,7 @@ class BoxDiagramTableEditor {
     return `
       <div class="raw-json-container">
         <div class="alert-box alert-warning">
-          <strong>⚠️ 上級者向け生JSON編集</strong><br>
+          <strong>上級者向け：JSON直接編集</strong><br>
           JSONを直接編集すると構造破綻のリスクがあります。通常の編集は「列車表」「運用一覧」などのGUIタブを使用してください。<br>
           編集する場合は下記のチェックボックスをONにして「適用する」ボタンを押してください。スキーマ検証が行われます。
         </div>
@@ -1134,7 +1203,7 @@ class BoxDiagramTableEditor {
             <span class="font-bold">JSONの直接編集を有効化する</span>
           </label>
           <div>
-            <button id="btnCopyJson" class="btn btn-sm btn-secondary">📋 コピー</button>
+            <button id="btnCopyJson" class="btn btn-sm btn-secondary">コピー</button>
             <button id="btnApplyRawJson" class="btn btn-sm btn-primary" disabled>適用する</button>
           </div>
         </div>
@@ -1571,6 +1640,8 @@ class BoxDiagramTableEditor {
             val = (val === "all") ? "all" : (parseInt(val, 10) || 1);
           } else if (field === "axisMode") {
             val = (val === "time") ? "time" : "station";
+          } else if (field === "font") {
+            val = BoxDiagramDataModel.normalizeFontId(val, "F1");
           }
 
           this.safeMutate(() => {
@@ -1700,6 +1771,19 @@ class BoxDiagramTableEditor {
         });
       }
 
+      bindSettingSelect("#selectStationAxisDirection", "stationAxisDirection", (v) => v === "rtl" ? "rtl" : "ltr");
+
+      this.container.querySelectorAll("select[data-font-role]").forEach(sel => {
+        sel.addEventListener("change", (e) => {
+          const role = sel.dataset.fontRole;
+          if (!role) return;
+          const fontVal = BoxDiagramDataModel.normalizeFontId(e.target.value, role === "time" ? "F2" : "F1");
+          this.safeMutate(() => {
+            this.model.updateSettings({ fonts: { [role]: fontVal } });
+          });
+        });
+      });
+
       const selectSubHeader = this.container.querySelector("#selectSubHeaderMode");
       if (selectSubHeader) {
         selectSubHeader.addEventListener("change", (e) => {
@@ -1764,6 +1848,8 @@ class BoxDiagramTableEditor {
             partialConnectStepRows: 1,
             blockPaddingRows: 2,
             stationHeaderDirection: "vertical",
+            stationAxisDirection: "ltr",
+            fonts: Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS),
             subHeaderMode: "omitFirst",
             selfHighlightStyle: "red",
             autoSyncCoupled: true,
@@ -1818,8 +1904,8 @@ class BoxDiagramTableEditor {
       if (btnCopy && textarea) {
         btnCopy.addEventListener("click", () => {
           navigator.clipboard.writeText(textarea.value).then(() => {
-            btnCopy.textContent = "コピー完了 ✓";
-            setTimeout(() => { btnCopy.textContent = "📋 コピー"; }, 1500);
+            btnCopy.textContent = "コピー完了";
+            setTimeout(() => { btnCopy.textContent = "コピー"; }, 1500);
           });
         });
       }
