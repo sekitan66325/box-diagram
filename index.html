@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>箱ダイヤ描画ソフト - 鉄道車両仕業行路図作成システム</title>
-  <meta name="description" content="Excelの罫線引きやセル結合は不要。ブラウザだけで鉄道の箱ダイヤ（車両運用図・仕業行路図）を作成・編集し、1:1ベクターPDFとして出力できる無料Webアプリ（β版）です。">
+  <title>箱ダイヤ描画システム - 車両運用図・仕業行路図作成ツール</title>
+  <meta name="description" content="ブラウザだけで鉄道の箱ダイヤ（駅軸）や時刻軸の運用線図（棒ダイヤ）を作成・編集し、.oud/.oud2読込や1:1ベクターPDF出力ができる無料Webアプリ（v1.1β）です。">
   <meta name="theme-color" content="#2F6F73">
   <link rel="canonical" href="https://sekitan66325.github.io/box-diagram/">
 
-  <meta property="og:title" content="箱ダイヤ描画ソフト - 鉄道車両仕業行路図作成システム">
-  <meta property="og:description" content="ブラウザだけで鉄道の箱ダイヤ（車両運用図・仕業行路図）を作成・編集し、そのままA4/B5のベクターPDFとして出力できる無料Webアプリです。">
+  <meta property="og:title" content="箱ダイヤ描画システム - 車両運用図・仕業行路図作成ツール">
+  <meta property="og:description" content="ブラウザだけで鉄道の箱ダイヤ・時刻軸運用線図を作成・編集し、.oud/.oud2取込や変形サイズ対応の1:1ベクターPDF出力ができる無料Webアプリ（v1.1β）です。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://sekitan66325.github.io/box-diagram/">
   <meta property="og:image" content="https://sekitan66325.github.io/box-diagram/assets/apple-touch-icon.png">
@@ -46,7 +46,7 @@
       <div class="brand">
         <img src="assets/favicon.svg" alt="" class="brand-icon" width="24" height="24">
         <span class="brand-title">箱ダイヤ描画システム</span>
-        <span class="beta-badge" title="一般公開 β版">β版</span>
+        <span class="beta-badge" title="公開バージョン v1.1β">v1.1β</span>
         <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="portal-back-link" title="真岡鐵道 情報ポータル（sekitan66325.github.io）を新しいタブで開く">
           情報ポータル ↗
         </a>
@@ -92,6 +92,11 @@
         <!-- 使い方・ヘルプ -->
         <button id="btnHelp" class="btn btn-sm btn-secondary" title="使い方・仕様ガイドを開く (F1)">
           使い方
+        </button>
+
+        <!-- 利用規約 -->
+        <button id="btnTerms" class="btn btn-sm btn-secondary" title="利用規約・クレジット表記ルール・免責事項を開く">
+          利用規約
         </button>
 
         <!-- お問い合わせ・ご意見フォーム -->
@@ -156,8 +161,8 @@
             <button id="btnPrevPage" class="btn btn-xs btn-secondary" disabled>◀ 前へ</button>
             <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 44px; text-align: center;">1 / 1</span>
             <button id="btnNextPage" class="btn btn-xs btn-secondary" disabled>次へ ▶</button>
-            <label class="checkbox-simple" style="margin-left: 4px;">
-              <input type="checkbox" id="checkShowAllPages" checked />
+            <label class="toggle-switch toggle-switch-sm" style="margin-left: 4px;" title="ONのとき全ページを縦に並べて表示します">
+              <input type="checkbox" class="toggle-input toggle-sm" id="checkShowAllPages" checked />
               <span>全ページ</span>
             </label>
           </div>
@@ -396,6 +401,7 @@
           (C) 2026 <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="footer-portal-link">せきたん (sekitan66325.github.io) ↗</a> — 箱ダイヤ描画ソフト
         </span>
         <div class="modal-footer-actions">
+          <button id="btnOpenTermsFromHelp" type="button" class="btn btn-sm btn-secondary" title="利用規約・クレジット表記ルールを確認する">利用規約</button>
           <button id="btnOpenFeedbackFromHelp" type="button" class="btn btn-sm btn-secondary" title="アプリ内フォームでお問い合わせを送る">お問い合わせ</button>
           <a href="https://docs.google.com/forms/d/e/1FAIpQLSc45MP0RUGMoadCOQn6BY76kv__9lb29PureF1rfRvtywM2ZQ/viewform" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-secondary" title="Googleフォームを新しいタブで開く">フォームを別タブで開く ↗</a>
           <button id="btnCloseHelpFooter" class="btn btn-primary btn-sm">閉じる</button>
@@ -478,12 +484,12 @@
             </select>
           </div>
           <div class="oud-field oud-checkbox-stack">
-            <label class="checkbox-simple">
-              <input type="checkbox" id="oudCheckExcludeCanceled" checked />
+            <label class="toggle-switch toggle-switch-sm">
+              <input type="checkbox" class="toggle-input toggle-sm" id="oudCheckExcludeCanceled" checked />
               <span>運休扱いの列車を除外する</span>
             </label>
-            <label class="checkbox-simple">
-              <input type="checkbox" id="oudCheckSameRow" checked />
+            <label class="toggle-switch toggle-switch-sm">
+              <input type="checkbox" class="toggle-input toggle-sm" id="oudCheckSameRow" checked />
               <span>同一列車継走 (PropertySame) を同じ行に描く</span>
             </label>
           </div>
@@ -578,8 +584,8 @@
           </div>
         </div>
 
-        <label class="checkbox-simple" style="margin-top: 2px;">
-          <input type="checkbox" id="checkNewStarterTrain" />
+        <label class="toggle-switch toggle-switch-sm" style="margin-top: 2px;">
+          <input type="checkbox" class="toggle-input toggle-sm" id="checkNewStarterTrain" />
           <span>書き始めの目安として、A1に仮の1列車目（6:00発）を1本だけ入れて開始する</span>
         </label>
       </div>
@@ -595,6 +601,72 @@
       </div>
     </div>
   </div>
+
+  <!-- 利用規約・クレジット表記・免責事項 モーダル -->
+  <div id="termsModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog terms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="termsModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="termsModalTitle" class="modal-title">利用規約・クレジット表記・免責事項</h2>
+          <p class="modal-subtitle">箱ダイヤ描画システム（v1.1β）をご利用いただく際のルールとお願いです。</p>
+        </div>
+        <button id="btnCloseTerms" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="利用規約を閉じる">✕</button>
+      </div>
+
+      <div class="modal-body terms-modal-body">
+        <section class="terms-section">
+          <h3>第1条（出力データ・PDF等の利用範囲）</h3>
+          <p>
+            本ソフト（箱ダイヤ描画システム）を使用して作成・出力した <strong>PDFデータ・画像・SVG・JSONファイル</strong> 等は、個人利用・鉄道趣味活動・同人誌・ブログ・SNS投稿・資料配布・商用／非商用を問わず、<strong>自由にご利用・編集・配布</strong>していただけます。
+          </p>
+        </section>
+
+        <section class="terms-section">
+          <h3>第2条（公開・配布時のクレジット表記のお願い【必須】）</h3>
+          <p>
+            本ソフトで作成した PDF・画像・図表等を Webサイト・SNS（X 等）・動画・配布資料など<strong>第三者向けに公開または配布する場合は、必ず「本ソフトを使用して作成したこと」が分かるクレジット表記</strong>を添えてください。
+          </p>
+          <div class="terms-credit-box">
+            <div class="terms-credit-examples">
+              <div><strong>表記例：</strong> <code>箱ダイヤ描画システムで作成</code></div>
+              <div><strong>URL付き例：</strong> <code>箱ダイヤ描画システム (https://sekitan66325.github.io/box-diagram/) で作成</code></div>
+            </div>
+            <button type="button" id="btnCopyTermsCredit" class="btn btn-xs btn-secondary" title="表記例をクリップボードにコピー">表記例をコピー</button>
+          </div>
+          <p class="text-muted" style="font-size: 11.5px; margin-top: 6px;">
+            ※ 記載場所は「図面内の著作権欄」「SNS投稿本文」「Web記事や概要欄」のいずれでも構いません。左パネルの「基本設定」にある <code>＋ 本ソフト名を追記</code> ボタンを使うと、図面右上にワンクリックで追記できます。
+          </p>
+        </section>
+
+        <section class="terms-section">
+          <h3>第3条（免責事項・データ保全について）</h3>
+          <ul class="help-list">
+            <li><strong>データ破損・消失に関する免責：</strong> 本ソフトは 100% ブラウザ内のローカル環境のみで動作します。ブラウザのタブ閉じ・リロード・不具合・端末トラブル等により編集中のデータが破損または消失した場合でも、開発者は<strong>一切の責任を負いません</strong>。重要なデータはこまめに <code>保存 (JSON)</code> で手元にバックアップしてください。</li>
+            <li><strong>描画結果・取り込み結果の保証：</strong> 本ソフトは現状有姿（AS-IS）で提供されており、<code>.oud</code> / <code>.oud2</code> ファイルの変換精度、描画内容の正確性・完全性、および本ソフトの利用または利用不能によって生じたいかなる損害についても、開発者は一切の責任を負いません。</li>
+          </ul>
+        </section>
+
+        <section class="terms-section">
+          <h3>第4条（プライバシー・禁止事項・改定）</h3>
+          <ul class="help-list">
+            <li><strong>外部送信なし：</strong> 作成したダイヤデータ・読み込んだ JSON / <code>.oud</code> / <code>.oud2</code> ファイルが外部サーバーへ送信されることはありません（アクセス状況把握のため Google Analytics による匿名計測のみ行っています）。</li>
+            <li><strong>禁止事項：</strong> 公序良俗に反する利用、本ソフトや作者の信用を著しく毀損する利用はお控えください。</li>
+            <li><strong>規約の変更：</strong> 本規約は予告なく改定される場合があります。全文は <a href="./TERMS.md" target="_blank" rel="noopener noreferrer" class="footer-portal-link">TERMS.md ↗</a> でもご確認いただけます。</li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">最終改定: 2026年11月 / 箱ダイヤ描画システム v1.1β</span>
+        <div class="modal-footer-actions">
+          <button type="button" id="btnCloseTermsFooter" class="btn btn-primary btn-sm">同意して閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- フィードバック用トースト -->
+  <div id="appToast" class="app-toast" role="status" aria-live="polite" hidden></div>
 
   <!-- スクリプト読み込み順序 -->
   <script src="js/sample-data.js"></script>

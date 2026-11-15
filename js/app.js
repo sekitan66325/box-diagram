@@ -110,7 +110,13 @@ document.addEventListener("DOMContentLoaded", () => {
     "timeAxisEndHour",
     "timeAxisGridMinutes",
     "timeAxisLateNightFormat",
-    "timeAxisLabelDensity"
+    "timeAxisLabelDensity",
+    "pageNumberEnabled",
+    "pageNumberFormat",
+    "pageNumberPosition",
+    "pageNumberHideSingle",
+    "timeDisplayFormat",
+    "stationGridStyle"
   ];
 
   function applyStickyPreviewSettings(targetData, excludeKeys = []) {
@@ -449,8 +455,14 @@ document.addEventListener("DOMContentLoaded", () => {
           const row = editorContainer.querySelector(`tr[data-train-idx="${trainIdx}"]`);
           if (row) {
             row.scrollIntoView({ behavior: "smooth", block: "center" });
+            row.classList.remove("row-jump-flash");
+            void row.offsetWidth;
+            row.classList.add("row-jump-flash");
             row.style.outline = "2px solid var(--primary)";
-            setTimeout(() => { row.style.outline = ""; }, 1500);
+            setTimeout(() => {
+              row.style.outline = "";
+              row.classList.remove("row-jump-flash");
+            }, 1500);
           }
         }, 50);
 
@@ -930,6 +942,7 @@ document.addEventListener("DOMContentLoaded", () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showAppToast("JSONファイルを保存しました");
   });
 
   // 統合ファイルインポート (JSON / .oud / .oud2 自動判別)
@@ -1014,6 +1027,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeHelpModal();
     closeFeedbackModal();
     closeNewDiagramModal();
+    closeTermsModal();
     oudImportModalBackdrop.hidden = false;
   }
 
@@ -1618,6 +1632,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeHelpModal();
     closeFeedbackModal();
     closeOudImportModal();
+    closeTermsModal();
     if (inputNewTitle) inputNewTitle.value = "新規路線 車両運用図";
     if (inputNewCopyright) inputNewCopyright.value = "";
     if (selectNewRosterCount) selectNewRosterCount.value = "1";
@@ -1688,16 +1703,48 @@ document.addEventListener("DOMContentLoaded", () => {
       tableEditor.setActiveTab(firstRoster ? "tab-trains" : "tab-rosters");
       updateDocumentSourceUI("custom", `作成中: ${newData.metadata.title}`);
       closeNewDiagramModal();
+      showAppToast("新しいダイヤを作成しました");
     });
   }
+
+  const appToast = document.getElementById("appToast");
+  let toastTimer = null;
+  function showAppToast(message, durationMs = 2400) {
+    if (!appToast || !message) return;
+    if (toastTimer) {
+      clearTimeout(toastTimer);
+      toastTimer = null;
+    }
+    appToast.textContent = message;
+    appToast.hidden = false;
+    appToast.classList.remove("is-visible");
+    void appToast.offsetWidth;
+    appToast.classList.add("is-visible");
+    toastTimer = setTimeout(() => {
+      appToast.classList.remove("is-visible");
+      setTimeout(() => {
+        if (!appToast.classList.contains("is-visible")) {
+          appToast.hidden = true;
+        }
+      }, 260);
+    }, durationMs);
+  }
+  window.showAppToast = showAppToast;
 
   const btnHelp = document.getElementById("btnHelp");
   const helpModalBackdrop = document.getElementById("helpModalBackdrop");
   const btnCloseHelp = document.getElementById("btnCloseHelp");
   const btnCloseHelpFooter = document.getElementById("btnCloseHelpFooter");
   const btnOpenFeedbackFromHelp = document.getElementById("btnOpenFeedbackFromHelp");
+  const btnOpenTermsFromHelp = document.getElementById("btnOpenTermsFromHelp");
   const helpModalNav = document.getElementById("helpModalNav");
   const helpModalBody = document.getElementById("helpModalBody");
+
+  const btnTerms = document.getElementById("btnTerms");
+  const termsModalBackdrop = document.getElementById("termsModalBackdrop");
+  const btnCloseTerms = document.getElementById("btnCloseTerms");
+  const btnCloseTermsFooter = document.getElementById("btnCloseTermsFooter");
+  const btnCopyTermsCredit = document.getElementById("btnCopyTermsCredit");
 
   const btnFeedback = document.getElementById("btnFeedback");
   const feedbackModalBackdrop = document.getElementById("feedbackModalBackdrop");
@@ -1711,6 +1758,7 @@ document.addEventListener("DOMContentLoaded", () => {
     closeFeedbackModal();
     closeOudImportModal();
     closeNewDiagramModal();
+    closeTermsModal();
     helpModalBackdrop.hidden = false;
     if (helpModalBody) helpModalBody.scrollTop = 0;
     if (helpModalNav) {
@@ -1725,11 +1773,26 @@ document.addEventListener("DOMContentLoaded", () => {
     helpModalBackdrop.hidden = true;
   }
 
+  function openTermsModal() {
+    if (!termsModalBackdrop) return;
+    closeHelpModal();
+    closeFeedbackModal();
+    closeOudImportModal();
+    closeNewDiagramModal();
+    termsModalBackdrop.hidden = false;
+  }
+
+  function closeTermsModal() {
+    if (!termsModalBackdrop) return;
+    termsModalBackdrop.hidden = true;
+  }
+
   function openFeedbackModal() {
     if (!feedbackModalBackdrop) return;
     closeHelpModal();
     closeOudImportModal();
     closeNewDiagramModal();
+    closeTermsModal();
     feedbackModalBackdrop.hidden = false;
     if (feedbackFormFrame && feedbackFormFrame.dataset.src && !feedbackFormFrame.getAttribute("src")) {
       if (feedbackLoadingState) feedbackLoadingState.hidden = false;
@@ -1761,10 +1824,41 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (btnHelp) btnHelp.addEventListener("click", openHelpModal);
+  if (btnTerms) btnTerms.addEventListener("click", openTermsModal);
+  if (btnOpenTermsFromHelp) btnOpenTermsFromHelp.addEventListener("click", openTermsModal);
   if (btnFeedback) btnFeedback.addEventListener("click", openFeedbackModal);
   if (btnOpenFeedbackFromHelp) btnOpenFeedbackFromHelp.addEventListener("click", openFeedbackModal);
 
+  if (btnCopyTermsCredit) {
+    btnCopyTermsCredit.addEventListener("click", () => {
+      const text = "箱ダイヤ描画システム (https://sekitan66325.github.io/box-diagram/) で作成";
+      if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+        navigator.clipboard.writeText(text).then(() => {
+          showAppToast("クレジット表記例をコピーしました");
+        }).catch(() => {
+          showAppToast("コピーできなかった場合は画面上の文字列を選択してください");
+        });
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+          showAppToast("クレジット表記例をコピーしました");
+        } catch (err) {
+          showAppToast("コピーできなかった場合は画面上の文字列を選択してください");
+        }
+        document.body.removeChild(ta);
+      }
+    });
+  }
+
   bindModalCloseTriggers(helpModalBackdrop, btnCloseHelp, btnCloseHelpFooter, closeHelpModal);
+  bindModalCloseTriggers(termsModalBackdrop, btnCloseTerms, btnCloseTermsFooter, closeTermsModal);
   bindModalCloseTriggers(feedbackModalBackdrop, btnCloseFeedback, btnCloseFeedbackFooter, closeFeedbackModal);
   bindModalCloseTriggers(oudImportModalBackdrop, btnCloseOudImport, btnCancelOudImport, closeOudImportModal);
   bindModalCloseTriggers(newDiagramModalBackdrop, btnCloseNewDiagram, btnCancelNewDiagram, closeNewDiagramModal);
@@ -1796,6 +1890,9 @@ document.addEventListener("DOMContentLoaded", () => {
       } else if (oudImportModalBackdrop && !oudImportModalBackdrop.hidden) {
         e.preventDefault();
         closeOudImportModal();
+      } else if (termsModalBackdrop && !termsModalBackdrop.hidden) {
+        e.preventDefault();
+        closeTermsModal();
       } else if (feedbackModalBackdrop && !feedbackModalBackdrop.hidden) {
         e.preventDefault();
         closeFeedbackModal();

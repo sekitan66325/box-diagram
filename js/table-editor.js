@@ -20,6 +20,7 @@ class BoxDiagramTableEditor {
     this.isInternalInput = false;
     this.floatingPopover = null;
     this._docPopoverCloseHandler = null;
+    this._animateNextBody = false;
     this.lastSyncMessage = "";
 
     // リスナー登録
@@ -318,12 +319,18 @@ class BoxDiagramTableEditor {
   }
 
   setActiveTab(tabId) {
+    if (this.activeTab !== tabId) {
+      this._animateNextBody = true;
+    }
     this.activeTab = tabId;
     this.lastSyncMessage = "";
     this.render();
   }
 
   setActiveRoster(rosterId) {
+    if (this.activeRosterId !== rosterId) {
+      this._animateNextBody = true;
+    }
     this.activeRosterId = rosterId;
     this.lastSyncMessage = "";
     this.render();
@@ -333,6 +340,9 @@ class BoxDiagramTableEditor {
     this.closeFloatingPopover();
     const data = this.model.getData();
     if (!data) return;
+
+    const animateClass = this._animateNextBody ? "anim-panel-enter" : "";
+    this._animateNextBody = false;
 
     // アクティブ運用の確認
     const rosters = data.rosters || [];
@@ -367,7 +377,7 @@ class BoxDiagramTableEditor {
         </button>
       </div>
 
-      <div class="editor-body">
+      <div class="editor-body ${animateClass}">
         ${this.renderActiveTabContent(data)}
       </div>
     `;
@@ -441,8 +451,8 @@ class BoxDiagramTableEditor {
         </div>
 
         <div class="sync-toolbar-group">
-          <label class="sync-toggle-label" title="ONのとき、併結列車の列車番号・種別・発着駅・時刻・連結順序を変更すると相手運用にも即時反映します">
-            <input type="checkbox" id="checkAutoSyncCoupled" ${autoSync ? 'checked' : ''} />
+          <label class="toggle-switch toggle-switch-sm" title="ONのとき、併結列車の列車番号・種別・発着駅・時刻・連結順序を変更すると相手運用にも即時反映します">
+            <input type="checkbox" class="toggle-input toggle-sm" id="checkAutoSyncCoupled" ${autoSync ? 'checked' : ''} />
             <span>併結自動同期</span>
           </label>
           <button id="btnSyncCoupledAll" class="btn btn-sm btn-secondary" title="この運用の併結列車の着発情報・位置順序を相手運用へ一括反映（相手側の不足行も生成）">
@@ -654,8 +664,8 @@ class BoxDiagramTableEditor {
                   ${r.trains ? r.trains.length : 0} 本
                 </td>
                 <td class="text-center">
-                  <label class="checkbox-simple">
-                    <input type="checkbox" data-roster-field="pageBreakAfter" ${r.pageBreakAfter ? 'checked' : ''} />
+                  <label class="toggle-switch toggle-switch-sm">
+                    <input type="checkbox" class="toggle-input toggle-sm" data-roster-field="pageBreakAfter" ${r.pageBreakAfter ? 'checked' : ''} />
                     <span>改ページ</span>
                   </label>
                 </td>
@@ -781,7 +791,7 @@ class BoxDiagramTableEditor {
             ${stations.map((s, idx) => `
               <tr data-station-id="${this.escapeXml(s.id)}">
                 <td class="text-center">
-                  <input type="checkbox" data-station-field="visible" ${s.visible !== false ? 'checked' : ''} />
+                  <input type="checkbox" class="toggle-input toggle-sm" data-station-field="visible" aria-label="駅表示" ${s.visible !== false ? 'checked' : ''} />
                 </td>
                 <td>
                   <input type="text" class="cell-input font-bold" data-station-field="name" value="${this.escapeXml(s.name)}" />
@@ -916,18 +926,77 @@ class BoxDiagramTableEditor {
     const startHour = typeof set.timeAxisStartHour === "number" ? set.timeAxisStartHour : 4;
     const endHour = typeof set.timeAxisEndHour === "number" ? set.timeAxisEndHour : 25;
     const fonts = Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS, set.fonts || {});
+    const pageNumEnabled = set.pageNumberEnabled !== false;
+    const pageNumFormats = BoxDiagramDataModel.PAGE_NUMBER_FORMATS || [];
+    const pageNumPositions = BoxDiagramDataModel.PAGE_NUMBER_POSITIONS || [];
+    const showHeaderTitle = set.showHeaderTitle !== false;
+    const showHeaderCopyright = set.showHeaderCopyright !== false;
+    const colHeaderText = typeof set.rosterColHeaderText === "string" ? set.rosterColHeaderText : "運用番号";
+    const lineWidthScale = typeof set.lineWidthScale === "number" ? set.lineWidthScale : 1.0;
+    const symbolScale = typeof set.symbolScale === "number" ? set.symbolScale : 1.0;
+    const showTurnDash = set.showTimeAxisTurnaroundDash !== false;
 
     return `
       <div class="form-settings-container">
         <div class="settings-group">
-          <div class="group-title">ヘッダー・タイトル情報</div>
-          <div class="form-row">
-            <label class="form-label">図面タイトル:</label>
-            <input type="text" class="form-control" id="inputMetaTitle" value="${this.escapeXml(meta.title || '')}" />
+          <div class="group-title">ヘッダー・ページ番号設定</div>
+          <div class="setting-toggles-grid">
+            <label class="setting-toggle-card">
+              <span class="setting-toggle-text">タイトルを表示</span>
+              <input type="checkbox" class="toggle-input toggle-sm" id="checkShowHeaderTitle" ${showHeaderTitle ? 'checked' : ''} />
+            </label>
+            <label class="setting-toggle-card">
+              <span class="setting-toggle-text">著作権・作成者を表示</span>
+              <input type="checkbox" class="toggle-input toggle-sm" id="checkShowHeaderCopyright" ${showHeaderCopyright ? 'checked' : ''} />
+            </label>
           </div>
-          <div class="form-row">
-            <label class="form-label">著作権・作成者:</label>
-            <input type="text" class="form-control" id="inputMetaCopyright" value="${this.escapeXml(meta.copyright || '')}" />
+          <div class="form-row-grid" style="margin-top: 8px;">
+            <div class="form-col" style="flex: 1.4;">
+              <label class="form-label">図面タイトル:</label>
+              <input type="text" class="form-control" id="inputMetaTitle" value="${this.escapeXml(meta.title || '')}" ${!showHeaderTitle ? 'disabled' : ''} />
+            </div>
+            <div class="form-col" style="flex: 0.7;">
+              <label class="form-label">左端見出し文字:</label>
+              <input type="text" class="form-control" id="inputRosterColHeaderText" value="${this.escapeXml(colHeaderText)}" placeholder="運用番号" maxlength="10" />
+            </div>
+          </div>
+          <div class="form-row" style="margin-top: 6px;">
+            <label class="form-label">著作権・作成者（公開時クレジット記載欄としても使えます）:</label>
+            <div class="inline-input-with-btn">
+              <input type="text" class="form-control" id="inputMetaCopyright" value="${this.escapeXml(meta.copyright || '')}" placeholder="例: (C) 2026 作成者名" ${!showHeaderCopyright ? 'disabled' : ''} />
+              <button type="button" id="btnAppendCredit" class="btn btn-xs btn-secondary" title="利用規約に沿った制作クレジット表記を末尾に追記します">＋ 本ソフト名を追記</button>
+            </div>
+          </div>
+
+          <div class="settings-subpanel">
+            <div class="setting-toggles-grid">
+              <label class="setting-toggle-card">
+                <span class="setting-toggle-text">ページ番号を表示する</span>
+                <input type="checkbox" class="toggle-input toggle-sm" id="checkPageNumberEnabled" ${pageNumEnabled ? 'checked' : ''} />
+              </label>
+              <label class="setting-toggle-card">
+                <span class="setting-toggle-text">1ページのみ時は隠す</span>
+                <input type="checkbox" class="toggle-input toggle-sm" id="checkPageNumberHideSingle" ${set.pageNumberHideSingle ? 'checked' : ''} ${!pageNumEnabled ? 'disabled' : ''} />
+              </label>
+            </div>
+            <div class="form-row-grid" style="margin-top: 8px;">
+              <div class="form-col">
+                <label class="form-label">ページ番号の表記パターン:</label>
+                <select class="form-select" id="selectPageNumberFormat" ${!pageNumEnabled ? 'disabled' : ''}>
+                  ${pageNumFormats.map(f => `
+                    <option value="${f.value}" ${(set.pageNumberFormat || 'slash') === f.value ? 'selected' : ''}>${this.escapeXml(f.label)}</option>
+                  `).join("")}
+                </select>
+              </div>
+              <div class="form-col">
+                <label class="form-label">ページ番号の配置:</label>
+                <select class="form-select" id="selectPageNumberPosition" ${!pageNumEnabled ? 'disabled' : ''}>
+                  ${pageNumPositions.map(p => `
+                    <option value="${p.value}" ${(set.pageNumberPosition || 'bottom-center') === p.value ? 'selected' : ''}>${this.escapeXml(p.label)}</option>
+                  `).join("")}
+                </select>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -956,7 +1025,7 @@ class BoxDiagramTableEditor {
             </div>
           ` : ''}
           ${set.pageSize === 'CUSTOM' ? `
-            <div class="form-row-grid" style="margin-top: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="form-row-grid settings-subpanel">
               <div class="form-col">
                 <label class="form-label">用紙幅 (mm):</label>
                 <input type="number" class="form-control font-mono" id="inputCustomPageWidthMm" value="${set.customPageWidthMm || 420}" min="100" max="1800" step="5" />
@@ -968,13 +1037,13 @@ class BoxDiagramTableEditor {
             </div>
           ` : ''}
           <div class="form-row" style="margin-top: 10px;">
-            <label class="checkbox-simple">
-              <input type="checkbox" id="checkSeparatePageByAxis" ${isSeparatePage ? 'checked' : ''} />
+            <label class="toggle-switch">
+              <input type="checkbox" class="toggle-input" id="checkSeparatePageByAxis" ${isSeparatePage ? 'checked' : ''} />
               <span>駅軸と時刻軸で別の用紙サイズ・向きを使う（例: 駅軸はA4縦、時刻軸は変形自動フィット）</span>
             </label>
           </div>
           ${isSeparatePage ? `
-            <div class="form-row-grid" style="margin-top: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+            <div class="form-row-grid settings-subpanel">
               <div class="form-col">
                 <label class="form-label">時刻軸の用紙サイズ:</label>
                 <select class="form-select" id="selectTimeAxisPageSize">
@@ -997,7 +1066,7 @@ class BoxDiagramTableEditor {
               </div>
             ` : ''}
             ${set.timeAxisPageSize === 'CUSTOM' ? `
-              <div class="form-row-grid" style="margin-top: 6px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+              <div class="form-row-grid settings-subpanel" style="margin-top: 6px;">
                 <div class="form-col">
                   <label class="form-label">時刻軸の用紙幅 (mm):</label>
                   <input type="number" class="form-control font-mono" id="inputTimeAxisCustomWidthMm" value="${set.timeAxisCustomWidthMm || 560}" min="100" max="1800" step="5" />
@@ -1083,10 +1152,26 @@ class BoxDiagramTableEditor {
               </select>
             </div>
           </div>
+          <div class="form-row-grid" style="margin-top: 10px; align-items: end;">
+            <div class="form-col">
+              <label class="form-label">背景時刻縦線の濃さ:</label>
+              <select class="form-select" id="selectTimeAxisGridStyle">
+                <option value="default" ${(set.timeAxisGridStyle || 'default') === 'default' ? 'selected' : ''}>標準（見やすい罫線）</option>
+                <option value="subtle" ${set.timeAxisGridStyle === 'subtle' ? 'selected' : ''}>淡め（控えめ）</option>
+                <option value="none" ${set.timeAxisGridStyle === 'none' ? 'selected' : ''}>非表示</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="setting-toggle-card">
+                <span class="setting-toggle-text">待機折り返しの点線接続を表示</span>
+                <input type="checkbox" class="toggle-input toggle-sm" id="checkShowTimeAxisTurnaroundDash" ${showTurnDash ? 'checked' : ''} />
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="settings-group">
-          <div class="group-title">スタイル・レイアウト規則</div>
+          <div class="group-title">スタイル・見た目カスタマイズ</div>
           <div class="form-row-grid">
             <div class="form-col">
               <label class="form-label">駅名ヘッダーの向き:</label>
@@ -1103,29 +1188,83 @@ class BoxDiagramTableEditor {
               </select>
             </div>
           </div>
-          <div class="form-row">
-            <label class="form-label">省略駅名行 (下 真 茂) の表示:</label>
-            <select class="form-select" id="selectSubHeaderMode">
-              <option value="omitFirst" ${set.subHeaderMode === 'omitFirst' ? 'selected' : ''}>先頭運用は省略 (元PDF準拠)</option>
-              <option value="all" ${set.subHeaderMode === 'all' ? 'selected' : ''}>全運用ブロックに表示</option>
-              <option value="none" ${set.subHeaderMode === 'none' ? 'selected' : ''}>表示しない</option>
-            </select>
+          <div class="form-row-grid" style="margin-top: 8px;">
+            <div class="form-col">
+              <label class="form-label">発着時刻の表記形式:</label>
+              <select class="form-select" id="selectTimeDisplayFormat">
+                <option value="h:mm" ${(set.timeDisplayFormat || 'h:mm') === 'h:mm' ? 'selected' : ''}>6:08（標準・0詰めなし）</option>
+                <option value="hh:mm" ${set.timeDisplayFormat === 'hh:mm' ? 'selected' : ''}>06:08（先頭0埋めあり）</option>
+                <option value="hhmm" ${set.timeDisplayFormat === 'hhmm' ? 'selected' : ''}>0608（コロンなし4桁）</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">駅基準の縦ガイド線（駅軸）:</label>
+              <select class="form-select" id="selectStationGridStyle">
+                <option value="none" ${(set.stationGridStyle || 'none') === 'none' ? 'selected' : ''}>なし（標準・すっきり）</option>
+                <option value="dashed" ${set.stationGridStyle === 'dashed' ? 'selected' : ''}>薄い破線</option>
+                <option value="solid" ${set.stationGridStyle === 'solid' ? 'selected' : ''}>薄い実線</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">折り返し垂直線の色（駅軸）:</label>
+              <select class="form-select" id="selectTurnaroundColorMode">
+                <option value="next" ${(set.turnaroundColorMode || 'next') === 'next' ? 'selected' : ''}>後の列車色に合わせる（標準）</option>
+                <option value="prev" ${set.turnaroundColorMode === 'prev' ? 'selected' : ''}>前の列車色に合わせる</option>
+                <option value="black" ${set.turnaroundColorMode === 'black' ? 'selected' : ''}>常に黒にする</option>
+              </select>
+            </div>
           </div>
-          <div class="form-row">
-            <label class="form-label">自運用番号の強調スタイル:</label>
-            <select class="form-select" id="selectSelfHighlightStyle">
-              <option value="red" ${set.selfHighlightStyle === 'red' ? 'selected' : ''}>赤文字のみ (元PDF完全一致)</option>
-              <option value="bold" ${set.selfHighlightStyle === 'bold' ? 'selected' : ''}>太字</option>
-              <option value="underline" ${set.selfHighlightStyle === 'underline' ? 'selected' : ''}>下線</option>
-              <option value="red-bold" ${set.selfHighlightStyle === 'red-bold' ? 'selected' : ''}>赤文字＋太字</option>
-            </select>
+          <div class="form-row-grid" style="margin-top: 8px;">
+            <div class="form-col">
+              <label class="form-label">省略駅名行 (下 真 茂) の表示:</label>
+              <select class="form-select" id="selectSubHeaderMode">
+                <option value="omitFirst" ${set.subHeaderMode === 'omitFirst' ? 'selected' : ''}>先頭運用は省略 (標準)</option>
+                <option value="all" ${set.subHeaderMode === 'all' ? 'selected' : ''}>全運用ブロックに表示</option>
+                <option value="none" ${set.subHeaderMode === 'none' ? 'selected' : ''}>表示しない</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">自運用番号の強調スタイル:</label>
+              <select class="form-select" id="selectSelfHighlightStyle">
+                <option value="red" ${set.selfHighlightStyle === 'red' ? 'selected' : ''}>赤文字のみ (標準)</option>
+                <option value="bold" ${set.selfHighlightStyle === 'bold' ? 'selected' : ''}>太字</option>
+                <option value="underline" ${set.selfHighlightStyle === 'underline' ? 'selected' : ''}>下線</option>
+                <option value="red-bold" ${set.selfHighlightStyle === 'red-bold' ? 'selected' : ''}>赤文字＋太字</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">途中駅 部分継走の標準段下げ:</label>
+              <select class="form-select" id="selectPartialConnectStepRows">
+                <option value="1" ${(typeof set.partialConnectStepRows !== 'number' || set.partialConnectStepRows >= 1) ? 'selected' : ''}>1行（標準の段差）</option>
+                <option value="0" ${set.partialConnectStepRows === 0 ? 'selected' : ''}>0行（同じ横線上に詰める）</option>
+              </select>
+            </div>
           </div>
-          <div class="form-row">
-            <label class="form-label">途中駅 部分継走の標準段下げ:</label>
-            <select class="form-select" id="selectPartialConnectStepRows">
-              <option value="1" ${(typeof set.partialConnectStepRows !== 'number' || set.partialConnectStepRows >= 1) ? 'selected' : ''}>1行（標準：他資料準拠の段差）</option>
-              <option value="0" ${set.partialConnectStepRows === 0 ? 'selected' : ''}>0行（同じ横線上に詰める）</option>
-            </select>
+          <div class="form-row-grid" style="margin-top: 8px; align-items: end;">
+            <div class="form-col">
+              <label class="form-label">ダイヤ線の太さ倍率:</label>
+              <select class="form-select" id="selectLineWidthScale">
+                <option value="0.8" ${Math.abs(lineWidthScale - 0.8) < 0.05 ? 'selected' : ''}>0.8x（細め）</option>
+                <option value="1" ${Math.abs(lineWidthScale - 1.0) < 0.05 ? 'selected' : ''}>1.0x（標準）</option>
+                <option value="1.25" ${Math.abs(lineWidthScale - 1.25) < 0.05 ? 'selected' : ''}>1.25x（やや太め）</option>
+                <option value="1.5" ${Math.abs(lineWidthScale - 1.5) < 0.05 ? 'selected' : ''}>1.5x（太め）</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="form-label">発着記号 (○▲) の大きさ:</label>
+              <select class="form-select" id="selectSymbolScale">
+                <option value="0.8" ${Math.abs(symbolScale - 0.8) < 0.05 ? 'selected' : ''}>0.8x（小さめ）</option>
+                <option value="1" ${Math.abs(symbolScale - 1.0) < 0.05 ? 'selected' : ''}>1.0x（標準）</option>
+                <option value="1.25" ${Math.abs(symbolScale - 1.25) < 0.05 ? 'selected' : ''}>1.25x（大きめ）</option>
+                <option value="1.5" ${Math.abs(symbolScale - 1.5) < 0.05 ? 'selected' : ''}>1.5x（特大）</option>
+              </select>
+            </div>
+            <div class="form-col">
+              <label class="setting-toggle-card">
+                <span class="setting-toggle-text">運用ごとに交互の薄い背景（ゼブラ）</span>
+                <input type="checkbox" class="toggle-input toggle-sm" id="checkRosterZebraFill" ${set.rosterZebraFill ? 'checked' : ''} />
+              </label>
+            </div>
           </div>
           <div class="form-row-grid" style="margin-top: 10px;">
             <div class="form-col">
@@ -1204,8 +1343,8 @@ class BoxDiagramTableEditor {
         </div>
 
         <div class="json-actions-bar">
-          <label class="checkbox-simple">
-            <input type="checkbox" id="checkEnableRawEdit" />
+          <label class="toggle-switch">
+            <input type="checkbox" class="toggle-input" id="checkEnableRawEdit" />
             <span class="font-bold">JSONの直接編集を有効化する</span>
           </label>
           <div>
@@ -1716,6 +1855,66 @@ class BoxDiagramTableEditor {
         });
       };
 
+      const bindSettingToggle = (selector, key, rerenderAfter = false) => {
+        const el = this.container.querySelector(selector);
+        if (!el) return;
+        el.addEventListener("change", (e) => {
+          this.safeMutate(() => {
+            this.model.updateSettings({ [key]: !!e.target.checked });
+          });
+          if (rerenderAfter) this.render();
+        });
+      };
+
+      const rosterColInp = this.container.querySelector("#inputRosterColHeaderText");
+      if (rosterColInp) {
+        rosterColInp.addEventListener("input", (e) => {
+          this.safeMutate(() => {
+            this.model.updateSettings({ rosterColHeaderText: e.target.value });
+          });
+        });
+      }
+
+      const btnAppendCredit = this.container.querySelector("#btnAppendCredit");
+      if (btnAppendCredit && metaCopy) {
+        btnAppendCredit.addEventListener("click", () => {
+          const creditTag = "箱ダイヤ描画システムで作成";
+          const cur = (metaCopy.value || "").trim();
+          const next = cur.includes(creditTag)
+            ? cur
+            : (cur ? `${cur} / ${creditTag}` : creditTag);
+          metaCopy.value = next;
+          this.safeMutate(() => {
+            this.model.updateMetadata({ copyright: next });
+            this.model.updateSettings({ showHeaderCopyright: true });
+          });
+          const copyChk = this.container.querySelector("#checkShowHeaderCopyright");
+          if (copyChk && !copyChk.checked) {
+            copyChk.checked = true;
+            metaCopy.disabled = false;
+          }
+          if (typeof window.showAppToast === "function") {
+            window.showAppToast("著作権・作成者欄にクレジットを追記しました");
+          }
+        });
+      }
+
+      bindSettingToggle("#checkShowHeaderTitle", "showHeaderTitle", true);
+      bindSettingToggle("#checkShowHeaderCopyright", "showHeaderCopyright", true);
+      bindSettingToggle("#checkPageNumberEnabled", "pageNumberEnabled", true);
+      bindSettingToggle("#checkPageNumberHideSingle", "pageNumberHideSingle");
+      bindSettingToggle("#checkShowTimeAxisTurnaroundDash", "showTimeAxisTurnaroundDash");
+      bindSettingToggle("#checkRosterZebraFill", "rosterZebraFill");
+
+      bindSettingSelect("#selectPageNumberFormat", "pageNumberFormat");
+      bindSettingSelect("#selectPageNumberPosition", "pageNumberPosition");
+      bindSettingSelect("#selectTimeAxisGridStyle", "timeAxisGridStyle");
+      bindSettingSelect("#selectTimeDisplayFormat", "timeDisplayFormat");
+      bindSettingSelect("#selectStationGridStyle", "stationGridStyle");
+      bindSettingSelect("#selectTurnaroundColorMode", "turnaroundColorMode");
+      bindSettingSelect("#selectLineWidthScale", "lineWidthScale", v => parseFloat(v) || 1.0);
+      bindSettingSelect("#selectSymbolScale", "symbolScale", v => parseFloat(v) || 1.0);
+
       bindSettingSelect("#selectPageSize", "pageSize", v => v, true);
       bindSettingSelect("#selectOrientation", "orientation");
       bindSettingSelect("#selectTimeAxisPageSize", "timeAxisPageSize", v => v, true);
@@ -1855,25 +2054,37 @@ class BoxDiagramTableEditor {
       const btnResetSettings = this.container.querySelector("#btnResetSettingsToDefaults");
       if (btnResetSettings) {
         btnResetSettings.addEventListener("click", () => {
-          this.model.updateSettings({
-            baseRowHeight: 12.96,
-            rosterStepRows: 2,
-            partialConnectStepRows: 1,
-            blockPaddingRows: 2,
-            stationHeaderDirection: "vertical",
-            stationAxisDirection: "ltr",
-            fonts: Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS),
-            subHeaderMode: "omitFirst",
-            selfHighlightStyle: "red",
-            autoSyncCoupled: true,
-            timeAxisStartHour: 4,
-            timeAxisRangeMode: "auto",
-            timeAxisEndHour: 25,
-            timeAxisGridMinutes: 30,
-            timeAxisLateNightFormat: "24plus",
-            timeAxisLabelDensity: "auto"
-          });
+          const defaults = BoxDiagramDataModel.getDefaultSettings
+            ? BoxDiagramDataModel.getDefaultSettings()
+            : {
+                baseRowHeight: 12.96,
+                rosterStepRows: 2,
+                partialConnectStepRows: 1,
+                blockPaddingRows: 2,
+                stationHeaderDirection: "vertical",
+                stationAxisDirection: "ltr",
+                fonts: Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS),
+                subHeaderMode: "omitFirst",
+                selfHighlightStyle: "red",
+                autoSyncCoupled: true,
+                timeAxisStartHour: 4,
+                timeAxisRangeMode: "auto",
+                timeAxisEndHour: 25,
+                timeAxisGridMinutes: 30,
+                timeAxisLateNightFormat: "24plus",
+                timeAxisLabelDensity: "auto"
+              };
+          // 用紙サイズと軸モード自体以外の描画・スタイル・ページ番号・時間軸設定を初期化
+          const cur = this.model.getSettings();
+          this.model.updateSettings(Object.assign(defaults, {
+            pageSize: cur.pageSize || defaults.pageSize,
+            orientation: cur.orientation || defaults.orientation,
+            xAxisMode: cur.xAxisMode || defaults.xAxisMode
+          }));
           this.render();
+          if (typeof window.showAppToast === "function") {
+            window.showAppToast("基本設定（用紙・軸モード除く）を初期値に戻しました");
+          }
         });
       }
     }

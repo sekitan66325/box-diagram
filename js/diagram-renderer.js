@@ -382,15 +382,19 @@ class BoxDiagramRenderer {
 
     const titleText = data.metadata ? (data.metadata.title || "") : "";
     const copyText = data.metadata ? (data.metadata.copyright || "") : "";
+    const set = (data && data.settings) || {};
+    const showTitle = set.showHeaderTitle !== false;
+    const showCopy = set.showHeaderCopyright !== false;
+    const colHeaderText = typeof set.rosterColHeaderText === "string" ? set.rosterColHeaderText : "運用番号";
 
     const headerChrome = `
-      <text class="font-f1 font-header" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>
-      <text class="font-f1 font-header" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>
+      ${(showTitle && titleText) ? `<text class="font-f1 font-header" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>` : ""}
+      ${(showCopy && copyText) ? `<text class="font-f1 font-header" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>` : ""}
       <!-- ヘッダー上枠線 -->
       <rect x="${tableLeft}" y="${headerTop}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
       <!-- ヘッダー下枠線 -->
       <rect x="${tableLeft}" y="${geom.headerBottom}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
-      <text class="font-f1 font-header" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">運用番号</text>
+      <text class="font-f1 font-header" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(colHeaderText)}</text>
     `;
 
     // 左右の外枠縦線 (表全体の高さをカバー)
@@ -442,10 +446,31 @@ class BoxDiagramRenderer {
       }
     }
 
-    // フッターページ番号
-    elements.push(`
-      <text class="font-f1 font-header" x="${footerX}" y="${footerY}" font-size="13.28" fill="#000000" text-anchor="middle">${pageIndex}/${totalPages}</text>
-    `);
+    // フッター・ヘッダーページ番号（設定により有無・書式・位置を切替）
+    const pageNumEnabled = set.pageNumberEnabled !== false;
+    const hideSinglePageNum = !!set.pageNumberHideSingle;
+    if (pageNumEnabled && !(hideSinglePageNum && totalPages <= 1)) {
+      const pnFmt = set.pageNumberFormat || "slash";
+      const pnPos = set.pageNumberPosition || "bottom-center";
+      const pnText = this.formatPageNumberText(pageIndex, totalPages, pnFmt);
+      let pnX = footerX;
+      let pnY = footerY;
+      let pnAnchor = "middle";
+      if (pnPos === "bottom-right") {
+        pnX = copyRightX;
+        pnAnchor = "end";
+      } else if (pnPos === "bottom-left") {
+        pnX = titleLeftX;
+        pnAnchor = "start";
+      } else if (pnPos === "top-center") {
+        pnX = footerX;
+        pnY = "43.20";
+        pnAnchor = "middle";
+      }
+      elements.push(`
+        <text class="font-f1 font-header diagram-page-number" x="${pnX}" y="${pnY}" font-size="13.28" fill="#000000" text-anchor="${pnAnchor}">${this.escapeXml(pnText)}</text>
+      `);
+    }
 
     const rawFonts = (data && data.settings && data.settings.fonts) || {};
     const fontHeaderCss = resolveFontCss(rawFonts.header, "F1");
@@ -483,10 +508,11 @@ class BoxDiagramRenderer {
             .font-time { font-family: ${fontTimeCss}; }
             ${presetRules}
             .train-line-group { cursor: pointer; }
-            .train-line-group:hover line { stroke-width: 2.2px; }
+            .train-line-group line { transition: stroke-width 0.14s ease, opacity 0.14s ease; }
+            .train-line-group:hover line { stroke-width: 2.3px; }
             .diagram-note:hover text { text-decoration: underline; }
             .diagram-empty-hint { pointer-events: none; }
-            @media print { .diagram-empty-hint { display: none; } }
+            @media print { .diagram-empty-hint { display: none; } .train-line-group line { transition: none; } }
           </style>
         </defs>
         <rect width="${W}" height="${H}" fill="#FFFFFF" />
@@ -508,6 +534,10 @@ class BoxDiagramRenderer {
     const stationHeaderDir = settings.stationHeaderDirection || "vertical";
     const subHeaderMode = settings.subHeaderMode || "omitFirst";
     const highlightStyle = settings.selfHighlightStyle || "red";
+    const stationGridStyle = settings.stationGridStyle || "none";
+    const turnaroundColorMode = settings.turnaroundColorMode || "next";
+    const lineWidthScale = this.getScaleSetting(settings, "lineWidthScale", 1.0, 0.5, 2.5);
+    const rosterZebraFill = !!settings.rosterZebraFill;
 
     const borderWidth = geom.borderWidth;
     const subLineWidth = 1.28;
@@ -648,6 +678,30 @@ class BoxDiagramRenderer {
         : firstTrainY + 2 * R * scale;
       const blockBottomBorderBottom = blockBottomBorderTop + borderWidth;
 
+      // 運用ブロックゼブラ背景 & 駅縦ガイド線（列車線より下層）
+      const blockContentTopY = (!isFirstOnPage && showSubHeader && subHeaderLineY !== null)
+        ? subHeaderLineY + subLineWidth
+        : prevBlockBorderBottom;
+      if (rosterZebraFill && rIdx % 2 === 1) {
+        const zebraW = tableRight - (tableLeft + borderWidth);
+        const zebraH = blockBottomBorderTop - prevBlockBorderBottom;
+        if (zebraW > 0 && zebraH > 0) {
+          elements.push(`
+            <rect x="${(tableLeft + borderWidth).toFixed(2)}" y="${prevBlockBorderBottom.toFixed(2)}" width="${zebraW.toFixed(2)}" height="${zebraH.toFixed(2)}" fill="#F8FAFC" />
+          `);
+        }
+      }
+      if (stationGridStyle === "dashed" || stationGridStyle === "solid") {
+        const dashGridAttr = stationGridStyle === "dashed" ? `stroke="#CBD5E1" stroke-dasharray="3,2.5"` : `stroke="#E2E8F0"`;
+        const gridHBottom = blockBottomBorderTop;
+        for (const st of visibleStations) {
+          const stX = this.mapStationXToCanvas(st.x, geom);
+          elements.push(`
+            <line x1="${stX}" y1="${blockContentTopY.toFixed(2)}" x2="${stX}" y2="${gridHBottom.toFixed(2)}" ${dashGridAttr} stroke-width="0.72" />
+          `);
+        }
+      }
+
       // 運用番号（左列の中央に配置）
       // Y座標: (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32
       const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
@@ -684,11 +738,17 @@ class BoxDiagramRenderer {
             if (!this.isDepotTurnaroundBreak(prevTr, tr)) {
               const vY1 = prevItem.y;
               const vY2 = yTop + 1.28;
-              const vX = fromX - 0.64;
-              // 折り返し接続線は後続列車の種別色に合わせて自然に接続する
-              const vColor = lineColor || "#000000";
+              const vW = 1.28 * lineWidthScale;
+              const vX = fromX - vW / 2;
+              let vColor = lineColor || "#000000";
+              if (turnaroundColorMode === "prev") {
+                const prevType = this.getTrainType(data, prevTr.typeId);
+                vColor = (prevType && prevType.lineColor) || "#000000";
+              } else if (turnaroundColorMode === "black") {
+                vColor = "#000000";
+              }
               elements.push(`
-                <rect x="${vX.toFixed(2)}" y="${vY1.toFixed(2)}" width="1.28" height="${(vY2 - vY1).toFixed(2)}" fill="${vColor}" />
+                <rect x="${vX.toFixed(2)}" y="${vY1.toFixed(2)}" width="${vW.toFixed(2)}" height="${(vY2 - vY1).toFixed(2)}" fill="${vColor}" />
               `);
             }
           }
@@ -705,13 +765,15 @@ class BoxDiagramRenderer {
         // 破線スタイル
         const dashAttr = type.lineStyle === "dashed" ? `stroke-dasharray="6,3"` : (type.lineStyle === "dotted" ? `stroke-dasharray="2,2"` : ``);
         const yLineCenter = yTop + 0.64;
+        const baseStrokeW = (typeof type.lineWidth === "number" && type.lineWidth > 0) ? type.lineWidth : 1.28;
+        const scaledStrokeW = (baseStrokeW * lineWidthScale).toFixed(2);
         const hitW = Math.max(lineW, 6);
         const hitX = lineW >= 6 ? minX : (minX - (6 - lineW) / 2);
 
         elements.push(`
           <g class="train-line-group ${isSelected ? 'selected' : ''}" data-roster-id="${this.escapeXml(roster.id)}" data-train-index="${k}">
             ${isSelected ? `<line x1="${minX.toFixed(2)}" y1="${yLineCenter.toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${yLineCenter.toFixed(2)}" ${selectedGlow} />` : ''}
-            <line x1="${minX.toFixed(2)}" y1="${yLineCenter.toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${yLineCenter.toFixed(2)}" stroke="${lineColor}" stroke-width="1.28" ${dashAttr} />
+            <line x1="${minX.toFixed(2)}" y1="${yLineCenter.toFixed(2)}" x2="${maxX.toFixed(2)}" y2="${yLineCenter.toFixed(2)}" stroke="${lineColor}" stroke-width="${scaledStrokeW}" ${dashAttr} />
             ${this.options.interactive ? `<rect x="${hitX.toFixed(2)}" y="${(yLineCenter - 5).toFixed(2)}" width="${hitW.toFixed(2)}" height="10" fill="transparent" />` : ''}
           </g>
         `);
@@ -736,15 +798,18 @@ class BoxDiagramRenderer {
           arrY = belowY;
         }
 
-        if (tr.depTime) {
+        const dispDepTime = this.formatTrainTime(tr.depTime, settings);
+        const dispArrTime = this.formatTrainTime(tr.arrTime, settings);
+
+        if (dispDepTime) {
           elements.push(`
-            <text class="font-f2 font-time" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.depTime)}</text>
+            <text class="font-f2 font-time" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(dispDepTime)}</text>
           `);
         }
 
-        if (tr.arrTime) {
+        if (dispArrTime) {
           elements.push(`
-            <text class="font-f2 font-time" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(tr.arrTime)}</text>
+            <text class="font-f2 font-time" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(dispArrTime)}</text>
           `);
         }
 
@@ -874,11 +939,12 @@ class BoxDiagramRenderer {
    */
   renderSymbols(elements, train, fromX, toX, yTop, lineColor, settings) {
     const centerY = yTop + 0.64;
+    const symScale = this.getScaleSetting(settings, "symbolScale", 1.0, 0.5, 2.0);
 
     // 出発記号 (depSymbol: circle, circle_filled)
     if (train.depSymbol === "circle" || train.depSymbol === "circle_filled") {
-      const rx = 3.60;
-      const ry = 3.36;
+      const rx = (3.60 * symScale).toFixed(2);
+      const ry = (3.36 * symScale).toFixed(2);
       const fill = (train.depSymbol === "circle_filled") ? "#000000" : "#FFFFFF";
       elements.push(`
         <ellipse cx="${fromX.toFixed(2)}" cy="${centerY.toFixed(2)}" rx="${rx}" ry="${ry}" fill="${fill}" stroke="#000000" stroke-width="0.32" />
@@ -888,11 +954,13 @@ class BoxDiagramRenderer {
     // 到着記号 (arrSymbol: triangle, triangle_filled)
     if (train.arrSymbol === "triangle" || train.arrSymbol === "triangle_filled") {
       const fill = (train.arrSymbol === "triangle_filled") ? "#000000" : "#FFFFFF";
-      // 幅 7.20px, 高さ 5.60px, 枠線色 #223F59
-      // 頂点上向き
-      const p1 = `${toX.toFixed(2)},${(centerY - 3.04).toFixed(2)}`;
-      const p2 = `${(toX - 3.60).toFixed(2)},${(centerY + 2.56).toFixed(2)}`;
-      const p3 = `${(toX + 3.60).toFixed(2)},${(centerY + 2.56).toFixed(2)}`;
+      // 幅 7.20px * scale, 高さ 5.60px * scale, 枠線色 #223F59
+      const wHalf = 3.60 * symScale;
+      const topOff = 3.04 * symScale;
+      const botOff = 2.56 * symScale;
+      const p1 = `${toX.toFixed(2)},${(centerY - topOff).toFixed(2)}`;
+      const p2 = `${(toX - wHalf).toFixed(2)},${(centerY + botOff).toFixed(2)}`;
+      const p3 = `${(toX + wHalf).toFixed(2)},${(centerY + botOff).toFixed(2)}`;
 
       elements.push(`
         <polygon points="${p1} ${p2} ${p3}" fill="${fill}" stroke="#223F59" stroke-width="0.32" />
@@ -1152,6 +1220,9 @@ class BoxDiagramRenderer {
     const gridMin = settings.timeAxisGridMinutes === 60 ? 60 : 30;
     const lateFmt = settings.timeAxisLateNightFormat || "24plus";
     const density = settings.timeAxisLabelDensity === "full" ? "full" : "auto";
+    const timeGridStyle = settings.timeAxisGridStyle || "default";
+    const lineWidthScale = this.getScaleSetting(settings, "lineWidthScale", 1.0, 0.5, 2.5);
+    const rosterZebraFill = !!settings.rosterZebraFill;
 
     const borderWidth = geom.borderWidth;
     const subLineWidth = 1.28;
@@ -1242,19 +1313,32 @@ class BoxDiagramRenderer {
       const blockBottomBorderTop = round2(lastLaneY + bottomPad);
       const blockBottomBorderBottom = round2(blockBottomBorderTop + borderWidth);
 
-      // 背景時間軸グリッド（列車線の下層）
+      // 背景ゼブラ & 時間軸グリッド（列車線の下層）
       const gridTopY = blockTop;
       const gridBottomY = blockBottomBorderTop;
-      for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
-        const hx = timeToX(h * 60);
-        elements.push(`
-          <line x1="${hx}" y1="${gridTopY.toFixed(2)}" x2="${hx}" y2="${gridBottomY.toFixed(2)}" stroke="#CBD5E1" stroke-width="0.80" />
-        `);
-        if (gridMin === 30 && h < timeRange.endHour) {
-          const x30 = timeToX(h * 60 + 30);
+      if (rosterZebraFill && rIdx % 2 === 1) {
+        const zebraW = tableRight - (tableLeft + borderWidth);
+        const zebraH = blockBottomBorderTop - prevBlockBorderBottom;
+        if (zebraW > 0 && zebraH > 0) {
           elements.push(`
-            <line x1="${x30}" y1="${gridTopY.toFixed(2)}" x2="${x30}" y2="${gridBottomY.toFixed(2)}" stroke="#E2E8F0" stroke-width="0.64" stroke-dasharray="2.5,2.5" />
+            <rect x="${(tableLeft + borderWidth).toFixed(2)}" y="${prevBlockBorderBottom.toFixed(2)}" width="${zebraW.toFixed(2)}" height="${zebraH.toFixed(2)}" fill="#F8FAFC" />
           `);
+        }
+      }
+      if (timeGridStyle !== "none") {
+        const hourStroke = timeGridStyle === "subtle" ? "#E2E8F0" : "#CBD5E1";
+        const halfStroke = timeGridStyle === "subtle" ? "#F1F5F9" : "#E2E8F0";
+        for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
+          const hx = timeToX(h * 60);
+          elements.push(`
+            <line x1="${hx}" y1="${gridTopY.toFixed(2)}" x2="${hx}" y2="${gridBottomY.toFixed(2)}" stroke="${hourStroke}" stroke-width="0.80" />
+          `);
+          if (gridMin === 30 && h < timeRange.endHour) {
+            const x30 = timeToX(h * 60 + 30);
+            elements.push(`
+              <line x1="${x30}" y1="${gridTopY.toFixed(2)}" x2="${x30}" y2="${gridBottomY.toFixed(2)}" stroke="${halfStroke}" stroke-width="0.64" stroke-dasharray="2.5,2.5" />
+            `);
+          }
         }
       }
 
@@ -1299,6 +1383,8 @@ class BoxDiagramRenderer {
     const round2 = (v) => Math.round(v * 100) / 100;
     const { plotLeft, plotRight, highlightStyle, density, settings } = opts;
     const yCenter = round2(laneY + 0.64);
+    const lineWidthScale = this.getScaleSetting(settings, "lineWidthScale", 1.0, 0.5, 2.5);
+    const showTurnaroundDash = !(settings && settings.showTimeAxisTurnaroundDash === false);
 
     // 座標解決
     const geomItems = laneItems.map(it => {
@@ -1311,19 +1397,21 @@ class BoxDiagramRenderer {
     });
 
     // 1. 連続折り返し待機線（前着駅 === 次発駅、かつ入庫→出庫でない場合）
-    for (let i = 1; i < geomItems.length; i++) {
-      const prev = geomItems[i - 1];
-      const cur = geomItems[i];
-      if (
-        prev.train.toStation &&
-        cur.train.fromStation &&
-        prev.train.toStation === cur.train.fromStation &&
-        !this.isDepotTurnaroundBreak(prev.train, cur.train) &&
-        cur.x1 - prev.exactX2 >= 1.5
-      ) {
-        elements.push(`
-          <line x1="${prev.exactX2.toFixed(2)}" y1="${yCenter.toFixed(2)}" x2="${cur.x1.toFixed(2)}" y2="${yCenter.toFixed(2)}" stroke="#64748B" stroke-width="1.0" stroke-dasharray="3,2" />
-        `);
+    if (showTurnaroundDash) {
+      for (let i = 1; i < geomItems.length; i++) {
+        const prev = geomItems[i - 1];
+        const cur = geomItems[i];
+        if (
+          prev.train.toStation &&
+          cur.train.fromStation &&
+          prev.train.toStation === cur.train.fromStation &&
+          !this.isDepotTurnaroundBreak(prev.train, cur.train) &&
+          cur.x1 - prev.exactX2 >= 1.5
+        ) {
+          elements.push(`
+            <line x1="${prev.exactX2.toFixed(2)}" y1="${yCenter.toFixed(2)}" x2="${cur.x1.toFixed(2)}" y2="${yCenter.toFixed(2)}" stroke="#64748B" stroke-width="1.0" stroke-dasharray="3,2" />
+          `);
+        }
       }
     }
 
@@ -1335,7 +1423,8 @@ class BoxDiagramRenderer {
       const isSelected = (this.selectedRosterId === roster.id && this.selectedTrainIndex === item.index);
       const selectedGlow = isSelected ? `stroke="#2F6F73" stroke-width="4" stroke-opacity="0.4"` : ``;
       const dashAttr = type.lineStyle === "dashed" ? `stroke-dasharray="6,3"` : (type.lineStyle === "dotted" ? `stroke-dasharray="2,2"` : ``);
-      const lineWidth = type.lineWidth || 1.28;
+      const lineWidth = ((type.lineWidth || 1.28) * lineWidthScale).toFixed(2);
+      const tickWidth = (1.2 * lineWidthScale).toFixed(2);
 
       const hitW = Math.max(item.x2 - item.x1, 6);
       elements.push(`
@@ -1349,12 +1438,12 @@ class BoxDiagramRenderer {
       // 端点が明確に見える小ティック（シンボルが無い端のみ）
       if (tr.depSymbol !== "circle" && tr.depSymbol !== "circle_filled") {
         elements.push(`
-          <line x1="${item.x1.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x1.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="1.2" />
+          <line x1="${item.x1.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x1.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="${tickWidth}" />
         `);
       }
       if (tr.arrSymbol !== "triangle" && tr.arrSymbol !== "triangle_filled") {
         elements.push(`
-          <line x1="${item.x2.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x2.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="1.2" />
+          <line x1="${item.x2.toFixed(2)}" y1="${(yCenter - 3.0).toFixed(2)}" x2="${item.x2.toFixed(2)}" y2="${(yCenter + 3.0).toFixed(2)}" stroke="${lineColor}" stroke-width="${tickWidth}" />
         `);
       }
 
@@ -1473,10 +1562,12 @@ class BoxDiagramRenderer {
       const type = this.getTrainType(data, tr.typeId);
       const timeColor = type.timeColor || "#000000";
       if (item.hasDep && tr.depTime) {
-        timeCandidates.push({ x: item.x1, text: tr.depTime, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "dep" });
+        const dt = this.formatTrainTime(tr.depTime, settings);
+        if (dt) timeCandidates.push({ x: item.x1, text: dt, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "dep" });
       }
       if (item.hasArr && tr.arrTime) {
-        timeCandidates.push({ x: item.x2, text: tr.arrTime, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "arr" });
+        const at = this.formatTrainTime(tr.arrTime, settings);
+        if (at) timeCandidates.push({ x: item.x2, text: at, color: timeColor, isShortSpan: item.x2 - item.x1 < 22, side: "arr" });
       }
     }
 
@@ -1677,6 +1768,33 @@ class BoxDiagramRenderer {
     }
 
     return diag;
+  }
+
+  getScaleSetting(settings, key, fallback = 1.0, minVal = 0.5, maxVal = 2.5) {
+    if (!settings || settings[key] === undefined) return fallback;
+    if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.clampScale) {
+      return BoxDiagramDataModel.clampScale(settings[key], fallback, minVal, maxVal);
+    }
+    const n = typeof settings[key] === "number" ? settings[key] : parseFloat(settings[key]);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.round(Math.max(minVal, Math.min(maxVal, n)) * 100) / 100;
+  }
+
+  formatPageNumberText(pageIndex, totalPages, format = "slash") {
+    if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.formatPageNumberText) {
+      return BoxDiagramDataModel.formatPageNumberText(pageIndex, totalPages, format);
+    }
+    if (format === "dash") return `- ${pageIndex} -`;
+    if (format === "number") return `${pageIndex}`;
+    return `${pageIndex}/${totalPages}`;
+  }
+
+  formatTrainTime(rawTime, settings) {
+    const fmt = (settings && settings.timeDisplayFormat) || "h:mm";
+    if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.formatTrainTimeText) {
+      return BoxDiagramDataModel.formatTrainTimeText(rawTime, fmt);
+    }
+    return rawTime || "";
   }
 
   getTrainType(data, typeId) {

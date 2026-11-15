@@ -92,6 +92,112 @@ class BoxDiagramDataModel {
     };
   }
 
+  static get PAGE_NUMBER_FORMATS() {
+    return [
+      { value: "slash", label: "1/3（標準）" },
+      { value: "slashSpaced", label: "1 / 3（スペースあり）" },
+      { value: "dash", label: "- 1 -" },
+      { value: "number", label: "1（番号のみ）" },
+      { value: "pDot", label: "P.1" },
+      { value: "ja", label: "1 / 3 頁" },
+      { value: "pageOf", label: "Page 1 of 3" }
+    ];
+  }
+
+  static get PAGE_NUMBER_POSITIONS() {
+    return [
+      { value: "bottom-center", label: "下中央（標準）" },
+      { value: "bottom-right", label: "右下" },
+      { value: "bottom-left", label: "左下" },
+      { value: "top-center", label: "上中央（ヘッダー帯）" }
+    ];
+  }
+
+  /**
+   * 基本設定の既定値オブジェクトを返す（normalize・新規作成・初期値リセットで共有）
+   */
+  static getDefaultSettings() {
+    return {
+      pageSize: "A4",
+      orientation: "portrait",
+      pageBreakMode: "auto",
+      pageNumberEnabled: true,
+      pageNumberFormat: "slash",
+      pageNumberPosition: "bottom-center",
+      pageNumberHideSingle: false,
+      showHeaderTitle: true,
+      showHeaderCopyright: true,
+      rosterColHeaderText: "運用番号",
+      baseRowHeight: 12.96,
+      rosterStepRows: 2,
+      partialConnectStepRows: 1,
+      blockPaddingRows: 2,
+      stationHeaderDirection: "vertical",
+      stationAxisDirection: "ltr",
+      subHeaderMode: "omitFirst",
+      selfHighlightStyle: "red",
+      timeDisplayFormat: "h:mm",
+      stationGridStyle: "none",
+      turnaroundColorMode: "next",
+      lineWidthScale: 1.0,
+      showLegend: false,
+      symbolScale: 1.0,
+      symbolFill: "preset",
+      rosterZebraFill: false,
+      autoSyncCoupled: true,
+      fonts: Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS),
+      xAxisMode: "station",
+      separatePageSettingsByAxisMode: true,
+      timeAxisPageSize: "AUTO",
+      timeAxisOrientation: "landscape",
+      customPageWidthMm: 420,
+      customPageHeightMm: 220,
+      timeAxisCustomWidthMm: 560,
+      timeAxisCustomHeightMm: 220,
+      timeAxisStartHour: 4,
+      timeAxisRangeMode: "auto",
+      timeAxisEndHour: 25,
+      timeAxisGridMinutes: 30,
+      timeAxisGridStyle: "default",
+      timeAxisLateNightFormat: "24plus",
+      timeAxisLabelDensity: "auto",
+      showTimeAxisTurnaroundDash: true
+    };
+  }
+
+  static formatPageNumberText(pageIndex, totalPages, format = "slash") {
+    const p = Math.max(1, parseInt(pageIndex, 10) || 1);
+    const t = Math.max(p, parseInt(totalPages, 10) || 1);
+    switch (format) {
+      case "slashSpaced":
+        return `${p} / ${t}`;
+      case "dash":
+        return `- ${p} -`;
+      case "number":
+        return `${p}`;
+      case "pDot":
+        return `P.${p}`;
+      case "ja":
+        return `${p} / ${t} 頁`;
+      case "pageOf":
+        return `Page ${p} of ${t}`;
+      case "slash":
+      default:
+        return `${p}/${t}`;
+    }
+  }
+
+  static formatTrainTimeText(rawTime, format = "h:mm") {
+    if (!rawTime || typeof rawTime !== "string") return "";
+    if (!format || format === "h:mm") return rawTime;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(rawTime.trim());
+    if (!m) return rawTime;
+    const hPad = m[1].padStart(2, "0");
+    if (format === "hh:mm") return `${hPad}:${m[2]}`;
+    if (format === "hhmm") return `${hPad}${m[2]}`;
+    return rawTime;
+  }
+
   static normalizeFontId(fontId, fallback = "F1") {
     const presets = BoxDiagramDataModel.FONT_PRESETS;
     if (typeof fontId === "string" && presets[fontId]) return fontId;
@@ -108,6 +214,12 @@ class BoxDiagramDataModel {
     const num = typeof val === "number" ? val : parseFloat(val);
     if (!Number.isFinite(num)) return fallback;
     return Math.max(minMm, Math.min(maxMm, Math.round(num)));
+  }
+
+  static clampScale(val, fallback = 1.0, minVal = 0.5, maxVal = 2.5) {
+    const num = typeof val === "number" ? val : parseFloat(val);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.round(Math.max(minVal, Math.min(maxVal, num)) * 100) / 100;
   }
 
   /**
@@ -317,27 +429,14 @@ class BoxDiagramDataModel {
     }
 
     const layoutPreset = options.layoutPreset || "station_a4_portrait";
-    const settings = {
+    const settings = Object.assign(BoxDiagramDataModel.getDefaultSettings(), {
       pageSize: "A4",
       orientation: layoutPreset === "station_a4_landscape" ? "landscape" : "portrait",
       xAxisMode: layoutPreset === "time_auto" ? "time" : "station",
       separatePageSettingsByAxisMode: true,
       timeAxisPageSize: "AUTO",
-      timeAxisOrientation: "landscape",
-      pageBreakMode: "auto",
-      baseRowHeight: 12.96,
-      rosterStepRows: 2,
-      partialConnectStepRows: 1,
-      blockPaddingRows: 2,
-      stationHeaderDirection: "vertical",
-      stationAxisDirection: "ltr",
-      subHeaderMode: "omitFirst",
-      selfHighlightStyle: "red",
-      showLegend: false,
-      symbolScale: 1.0,
-      symbolFill: "preset",
-      autoSyncCoupled: true
-    };
+      timeAxisOrientation: "landscape"
+    });
 
     return {
       version: "2.0",
@@ -394,6 +493,16 @@ class BoxDiagramDataModel {
       trainNo: BoxDiagramDataModel.normalizeFontId(rawFonts.trainNo, defaultFonts.trainNo),
       time: BoxDiagramDataModel.normalizeFontId(rawFonts.time, defaultFonts.time)
     };
+    const validPageFormats = new Set(BoxDiagramDataModel.PAGE_NUMBER_FORMATS.map(f => f.value));
+    const validPagePositions = new Set(BoxDiagramDataModel.PAGE_NUMBER_POSITIONS.map(p => p.value));
+    const normPageNumFmt = validPageFormats.has(rawSet.pageNumberFormat) ? rawSet.pageNumberFormat : "slash";
+    const normPageNumPos = validPagePositions.has(rawSet.pageNumberPosition) ? rawSet.pageNumberPosition : "bottom-center";
+    const normTimeDispFmt = ["h:mm", "hh:mm", "hhmm"].includes(rawSet.timeDisplayFormat) ? rawSet.timeDisplayFormat : "h:mm";
+    const normStGrid = ["none", "dashed", "solid"].includes(rawSet.stationGridStyle) ? rawSet.stationGridStyle : "none";
+    const normTurnColor = ["next", "prev", "black"].includes(rawSet.turnaroundColorMode) ? rawSet.turnaroundColorMode : "next";
+    const normTimeGridStyle = ["default", "subtle", "none"].includes(rawSet.timeAxisGridStyle) ? rawSet.timeAxisGridStyle : "default";
+    const normLineWidthScale = BoxDiagramDataModel.clampScale(rawSet.lineWidthScale, 1.0, 0.5, 2.5);
+    const normSymbolScale = BoxDiagramDataModel.clampScale(rawSet.symbolScale, 1.0, 0.5, 2.0);
 
     const d = {
       version: raw.version || "2.0",
@@ -402,41 +511,23 @@ class BoxDiagramDataModel {
         copyright: "(C) 2026 せきたん",
         updatedAt: new Date().toISOString().split("T")[0]
       }, raw.metadata || {}),
-      settings: Object.assign({
-        pageSize: "A4",
-        orientation: "portrait",
-        pageBreakMode: "auto",
-        baseRowHeight: 12.96,
-        rosterStepRows: 2,
-        partialConnectStepRows: 1,
-        blockPaddingRows: 2,
-        stationHeaderDirection: "vertical", // "vertical" | "horizontal"
-        stationAxisDirection: "ltr", // "ltr" | "rtl"
-        subHeaderMode: "omitFirst",
-        selfHighlightStyle: "red",
-        showLegend: false,
-        symbolScale: 1.0,
-        symbolFill: "preset",
-        autoSyncCoupled: true,
-        fonts: normFonts,
-        xAxisMode: "station",
-        separatePageSettingsByAxisMode: normSeparatePage,
-        timeAxisPageSize: normTimePageSize,
-        timeAxisOrientation: "landscape",
-        customPageWidthMm: normCustomW,
-        customPageHeightMm: normCustomH,
-        timeAxisCustomWidthMm: normTimeCustomW,
-        timeAxisCustomHeightMm: normTimeCustomH,
-        timeAxisStartHour: normStartHour,
-        timeAxisRangeMode: "auto",
-        timeAxisEndHour: normEndHour,
-        timeAxisGridMinutes: 30,
-        timeAxisLateNightFormat: "24plus",
-        timeAxisLabelDensity: "auto"
-      }, rawSet, {
+      settings: Object.assign(BoxDiagramDataModel.getDefaultSettings(), rawSet, {
         pageSize: normPageSize,
         orientation: rawSet.orientation === "landscape" ? "landscape" : "portrait",
+        pageNumberEnabled: typeof rawSet.pageNumberEnabled === "boolean" ? rawSet.pageNumberEnabled : true,
+        pageNumberFormat: normPageNumFmt,
+        pageNumberPosition: normPageNumPos,
+        pageNumberHideSingle: !!rawSet.pageNumberHideSingle,
+        showHeaderTitle: typeof rawSet.showHeaderTitle === "boolean" ? rawSet.showHeaderTitle : true,
+        showHeaderCopyright: typeof rawSet.showHeaderCopyright === "boolean" ? rawSet.showHeaderCopyright : true,
+        rosterColHeaderText: typeof rawSet.rosterColHeaderText === "string" ? rawSet.rosterColHeaderText : "運用番号",
         stationAxisDirection: rawSet.stationAxisDirection === "rtl" ? "rtl" : "ltr",
+        timeDisplayFormat: normTimeDispFmt,
+        stationGridStyle: normStGrid,
+        turnaroundColorMode: normTurnColor,
+        lineWidthScale: normLineWidthScale,
+        symbolScale: normSymbolScale,
+        rosterZebraFill: !!rawSet.rosterZebraFill,
         fonts: normFonts,
         xAxisMode: rawSet.xAxisMode === "time" ? "time" : "station",
         separatePageSettingsByAxisMode: normSeparatePage,
@@ -450,8 +541,10 @@ class BoxDiagramDataModel {
         timeAxisRangeMode: rawSet.timeAxisRangeMode === "manual" ? "manual" : "auto",
         timeAxisEndHour: normEndHour,
         timeAxisGridMinutes: [10, 15, 30, 60].includes(rawSet.timeAxisGridMinutes) ? rawSet.timeAxisGridMinutes : 30,
+        timeAxisGridStyle: normTimeGridStyle,
         timeAxisLateNightFormat: normLateFmt,
         timeAxisLabelDensity: rawSet.timeAxisLabelDensity === "full" ? "full" : "auto",
+        showTimeAxisTurnaroundDash: typeof rawSet.showTimeAxisTurnaroundDash === "boolean" ? rawSet.showTimeAxisTurnaroundDash : true,
         autoSyncCoupled: typeof rawSet.autoSyncCoupled === "boolean" ? rawSet.autoSyncCoupled : true,
         partialConnectStepRows: typeof rawSet.partialConnectStepRows === "number" && !Number.isNaN(rawSet.partialConnectStepRows)
           ? Math.max(0, rawSet.partialConnectStepRows)
