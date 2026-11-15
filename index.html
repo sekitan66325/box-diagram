@@ -55,10 +55,8 @@
       <div class="header-actions">
         <!-- プリセット選択 -->
         <select id="presetSelect" class="form-select preset-select-control" style="font-weight: 500;">
-          <option value="sakuragawa_main">桜川電鉄 本線（全機能体験フルサンプル・2ページ）</option>
-          <option value="sakuragawa_exp">桜川電鉄 特急・回送・試運転サンプル</option>
-          <option value="midorikawa_compact">緑川鉄道 支線（コンパクト構成サンプル）</option>
-          <option value="sakuragawa_night">桜川電鉄 深夜・日跨ぎダイヤ（24時超えサンプル）</option>
+          <option value="sakuragawa_main">桜川電鉄 1日通しダイヤ（始発〜深夜・全機能サンプル）</option>
+          <option value="midorikawa_compact">緑川鉄道 支線（B5横・コンパクトサンプル）</option>
         </select>
 
         <!-- 元に戻す / やり直し -->
@@ -123,6 +121,8 @@
               <button type="button" id="btnAxisTime" class="seg-btn" title="横軸を時刻にする（運用線図／棒ダイヤ）">時刻</button>
             </div>
             <select id="selectQuickPageSize" class="form-select preview-quick-size" title="現在の表示モードに適用する用紙サイズ">
+              <option value="AUTO">変形 (自動)</option>
+              <option value="CUSTOM">変形 (手動)</option>
               <option value="A3">A3</option>
               <option value="B4">B4</option>
               <option value="A4" selected>A4</option>
@@ -134,6 +134,13 @@
               <button type="button" id="btnQuickPortrait" class="seg-btn active" title="用紙を縦向きにする">縦</button>
               <button type="button" id="btnQuickLandscape" class="seg-btn" title="用紙を横向きにする">横</button>
             </div>
+            <span id="quickCustomDimGroup" class="quick-custom-dim-group" hidden>
+              <input type="number" id="inputQuickCustomW" class="quick-dim-input font-mono" min="100" max="1800" step="5" title="用紙幅 (mm)" />
+              <span class="text-muted" style="font-size: 11px;">×</span>
+              <input type="number" id="inputQuickCustomH" class="quick-dim-input font-mono" min="80" max="1200" step="5" title="用紙高さ (mm)" />
+              <span class="text-muted" style="font-size: 10.5px;">mm</span>
+            </span>
+            <span id="quickPageSizeReadout" class="quick-size-readout font-mono" title="現在算出された変形用紙寸法" hidden></span>
             <span id="quickPageModeBadge" class="quick-separate-badge" title="駅軸と時刻軸で別の用紙設定を使用中" hidden>別設定</span>
           </div>
 

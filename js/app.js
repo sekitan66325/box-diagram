@@ -37,6 +37,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectQuickPageSize = document.getElementById("selectQuickPageSize");
   const btnQuickPortrait = document.getElementById("btnQuickPortrait");
   const btnQuickLandscape = document.getElementById("btnQuickLandscape");
+  const quickCustomDimGroup = document.getElementById("quickCustomDimGroup");
+  const inputQuickCustomW = document.getElementById("inputQuickCustomW");
+  const inputQuickCustomH = document.getElementById("inputQuickCustomH");
+  const quickPageSizeReadout = document.getElementById("quickPageSizeReadout");
   const quickPageModeBadge = document.getElementById("quickPageModeBadge");
   const layoutSuggestionBar = document.getElementById("layoutSuggestionBar");
   const btnPrevPage = document.getElementById("btnPrevPage");
@@ -64,6 +68,10 @@ document.addEventListener("DOMContentLoaded", () => {
     "separatePageSettingsByAxisMode",
     "timeAxisPageSize",
     "timeAxisOrientation",
+    "customPageWidthMm",
+    "customPageHeightMm",
+    "timeAxisCustomWidthMm",
+    "timeAxisCustomHeightMm",
     "timeAxisStartHour",
     "timeAxisRangeMode",
     "timeAxisEndHour",
@@ -96,7 +104,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     updateHistoryButtons();
     renderPreview({ resetScroll: actionType === "load" });
-    updatePrintPageStyle(data);
   });
 
   function updateHistoryButtons() {
@@ -104,8 +111,8 @@ document.addEventListener("DOMContentLoaded", () => {
     btnRedo.disabled = !dataModel.canRedo();
   }
 
-  function updatePrintPageStyle(data) {
-    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
+  function updatePrintPageStyle(data, effectiveCfgArg = null) {
+    const cfg = effectiveCfgArg || BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
     if (dynamicPrintStyle) {
       dynamicPrintStyle.textContent = `
         @page {
@@ -116,8 +123,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function syncPreviewToolbarControls(data) {
-    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
+  function syncPreviewToolbarControls(data, effectiveCfgArg = null) {
+    const cfg = effectiveCfgArg || BoxDiagramDataModel.getEffectivePageConfig(data ? data.settings : {});
     if (btnAxisStation) {
       btnAxisStation.classList.toggle("active", cfg.xAxisMode !== "time");
       btnAxisStation.setAttribute("aria-pressed", String(cfg.xAxisMode !== "time"));
@@ -133,12 +140,37 @@ document.addEventListener("DOMContentLoaded", () => {
         : "現在の表示モードに適用する用紙サイズ";
     }
     if (btnQuickPortrait) {
+      btnQuickPortrait.disabled = !!cfg.isAutoPageSize;
       btnQuickPortrait.classList.toggle("active", !cfg.isLandscape);
       btnQuickPortrait.setAttribute("aria-pressed", String(!cfg.isLandscape));
+      btnQuickPortrait.title = cfg.isAutoPageSize
+        ? "変形(自動)ではデータ量に応じて縦横寸法を自動決定します"
+        : "用紙を縦向きにする";
     }
     if (btnQuickLandscape) {
+      btnQuickLandscape.disabled = !!cfg.isAutoPageSize;
       btnQuickLandscape.classList.toggle("active", cfg.isLandscape);
       btnQuickLandscape.setAttribute("aria-pressed", String(cfg.isLandscape));
+      btnQuickLandscape.title = cfg.isAutoPageSize
+        ? "変形(自動)ではデータ量に応じて縦横寸法を自動決定します"
+        : "用紙を横向きにする";
+    }
+    if (quickCustomDimGroup) {
+      quickCustomDimGroup.hidden = !cfg.isCustomPageSize;
+      if (cfg.isCustomPageSize) {
+        if (inputQuickCustomW && document.activeElement !== inputQuickCustomW) {
+          inputQuickCustomW.value = cfg.widthMm;
+        }
+        if (inputQuickCustomH && document.activeElement !== inputQuickCustomH) {
+          inputQuickCustomH.value = cfg.heightMm;
+        }
+      }
+    }
+    if (quickPageSizeReadout) {
+      quickPageSizeReadout.hidden = !cfg.isAutoPageSize;
+      if (cfg.isAutoPageSize) {
+        quickPageSizeReadout.textContent = `${cfg.widthMm}×${cfg.heightMm}mm`;
+      }
     }
     if (quickPageModeBadge) {
       quickPageModeBadge.hidden = !cfg.isSeparateMode;
@@ -199,12 +231,37 @@ document.addEventListener("DOMContentLoaded", () => {
   function applyEffectivePagePatch(patch) {
     const cfg = BoxDiagramDataModel.getEffectivePageConfig(dataModel.getSettings());
     const mapped = {};
-    if (cfg.isSeparateMode && cfg.xAxisMode === "time") {
+    const isSeparateTime = !!(cfg.isSeparateMode && cfg.xAxisMode === "time");
+
+    if (patch.orientation && cfg.isCustomPageSize && !patch.pageSize) {
+      const w = cfg.widthMm;
+      const h = cfg.heightMm;
+      const wantLandscape = patch.orientation === "landscape";
+      const nextW = wantLandscape ? Math.max(w, h) : Math.min(w, h);
+      const nextH = wantLandscape ? Math.min(w, h) : Math.max(w, h);
+      if (isSeparateTime) {
+        mapped.timeAxisCustomWidthMm = nextW;
+        mapped.timeAxisCustomHeightMm = nextH;
+        mapped.timeAxisOrientation = patch.orientation;
+      } else {
+        mapped.customPageWidthMm = nextW;
+        mapped.customPageHeightMm = nextH;
+        mapped.orientation = patch.orientation;
+      }
+      dataModel.updateSettings(mapped);
+      return;
+    }
+
+    if (isSeparateTime) {
       if (patch.pageSize) mapped.timeAxisPageSize = patch.pageSize;
       if (patch.orientation) mapped.timeAxisOrientation = patch.orientation;
+      if (patch.widthMm !== undefined) mapped.timeAxisCustomWidthMm = patch.widthMm;
+      if (patch.heightMm !== undefined) mapped.timeAxisCustomHeightMm = patch.heightMm;
     } else {
       if (patch.pageSize) mapped.pageSize = patch.pageSize;
       if (patch.orientation) mapped.orientation = patch.orientation;
+      if (patch.widthMm !== undefined) mapped.customPageWidthMm = patch.widthMm;
+      if (patch.heightMm !== undefined) mapped.customPageHeightMm = patch.heightMm;
     }
     dataModel.updateSettings(mapped);
   }
@@ -219,9 +276,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const renderedPages = diagramRenderer.renderPages(data);
     totalPageCount = renderedPages.length;
+    const diag = diagramRenderer.getLastDiagnostics();
+    const effectiveCfg = (renderedPages[0] && renderedPages[0].pageConfig)
+      || (diag && diag.effectivePageConfig)
+      || BoxDiagramDataModel.getEffectivePageConfig(data.settings);
 
-    syncPreviewToolbarControls(data);
-    updateLayoutSuggestionBar(data, diagramRenderer.getLastDiagnostics());
+    syncPreviewToolbarControls(data, effectiveCfg);
+    updateLayoutSuggestionBar(data, diag);
+    updatePrintPageStyle(data, effectiveCfg);
 
     if (currentPageIndex > totalPageCount) {
       currentPageIndex = totalPageCount;
@@ -239,41 +301,42 @@ document.addEventListener("DOMContentLoaded", () => {
     const showAll = checkShowAllPages.checked;
     previewViewport.innerHTML = "";
 
-    // ページごとの実効用紙寸法計算 (A3/B4/A4/B5/A5/B6 × 縦/横、モード別設定対応)
-    const cfg = BoxDiagramDataModel.getEffectivePageConfig(data.settings);
-    const baseW = cfg.baseW;
-    const baseH = cfg.baseH;
-
-    // ズーム倍率の計算
+    // ページごとの実効用紙寸法計算 (AUTO / CUSTOM / A3..B6)
     const availW = Math.max(200, previewViewport.clientWidth - 48);
     const availH = Math.max(200, previewViewport.clientHeight - 48);
-
-    if (zoomMode === "fit-width") {
-      appliedScale = availW / baseW;
-    } else if (zoomMode === "fit") {
-      const scaleW = availW / baseW;
-      const scaleH = availH / baseH;
-      appliedScale = Math.min(scaleW, scaleH);
-    } else {
-      appliedScale = currentZoom;
-    }
-    appliedScale = Math.max(0.2, Math.min(2.5, appliedScale));
 
     // 描画対象ページを決定
     const pagesToDraw = showAll ? renderedPages : renderedPages.filter(p => p.pageIndex === currentPageIndex);
 
     pagesToDraw.forEach(page => {
+      const pageCfg = page.pageConfig || effectiveCfg;
+      const baseW = pageCfg.baseW;
+      const baseH = pageCfg.baseH;
+
+      let pageScale;
+      if (zoomMode === "fit-width") {
+        pageScale = availW / baseW;
+      } else if (zoomMode === "fit") {
+        const scaleW = availW / baseW;
+        const scaleH = availH / baseH;
+        pageScale = Math.min(scaleW, scaleH);
+      } else {
+        pageScale = currentZoom;
+      }
+      pageScale = Math.max(0.15, Math.min(2.5, pageScale));
+      appliedScale = pageScale;
+
       const wrapperEl = document.createElement("div");
       wrapperEl.className = "preview-page-wrapper";
-      wrapperEl.style.width = `${Math.round(baseW * appliedScale)}px`;
-      wrapperEl.style.height = `${Math.round(baseH * appliedScale)}px`;
+      wrapperEl.style.width = `${Math.round(baseW * pageScale)}px`;
+      wrapperEl.style.height = `${Math.round(baseH * pageScale)}px`;
 
       const sheetEl = document.createElement("div");
       sheetEl.className = "preview-page-sheet";
       sheetEl.dataset.pageIndex = page.pageIndex;
       sheetEl.style.width = `${baseW}px`;
       sheetEl.style.height = `${baseH}px`;
-      sheetEl.style.transform = `scale(${appliedScale})`;
+      sheetEl.style.transform = `scale(${pageScale})`;
       sheetEl.style.transformOrigin = "top left";
 
       sheetEl.innerHTML = page.svgHtml;
@@ -281,7 +344,7 @@ document.addEventListener("DOMContentLoaded", () => {
       previewViewport.appendChild(wrapperEl);
 
       // SVG内の対話イベントを設定
-      bindSvgInteractions(sheetEl.querySelector("svg"), page.pageIndex);
+      bindSvgInteractions(sheetEl.querySelector("svg"), page.pageIndex, page.pageConfig);
     });
 
     // 再描画時の意図しないスクロールリセット（Page 1先頭への飛び）を防止
@@ -295,13 +358,27 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // 5. SVG上のインタラクション（列車クリック連動・注記ドラッグ＆Alt吸着）
-  function bindSvgInteractions(svgEl, pageIdx) {
+  function bindSvgInteractions(svgEl, pageIdx, pageCfg = null) {
     if (!svgEl) return;
 
     // 列車線クリック -> 該当行を選択
     svgEl.querySelectorAll(".train-line-group").forEach(group => {
+      group.addEventListener("mousedown", (e) => {
+        if (e.button === 0) {
+          // エディタ側inputへのblur->change->renderPreview()でクリック対象SVGが破棄されるのを防ぐ
+          e.preventDefault();
+        }
+      });
       group.addEventListener("click", (e) => {
         e.stopPropagation();
+        if (
+          document.activeElement &&
+          editorContainer &&
+          editorContainer.contains(document.activeElement) &&
+          typeof document.activeElement.blur === "function"
+        ) {
+          document.activeElement.blur();
+        }
         const rosterId = group.dataset.rosterId;
         const trainIdx = parseInt(group.dataset.trainIndex, 10);
 
@@ -397,7 +474,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!noteObj) return;
 
         const curData = dataModel.getData();
-        const pageGeom = diagramRenderer.getPageGeometry(curData);
+        const pageGeom = diagramRenderer.getPageGeometry(curData, pageCfg);
         const vb = (svgEl.viewBox && svgEl.viewBox.baseVal && svgEl.viewBox.baseVal.width > 0)
           ? svgEl.viewBox.baseVal
           : { width: pageGeom.W, height: pageGeom.H };
@@ -707,9 +784,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // プリセット切り替え
   const PRESET_MAP = {
     sakuragawa_main: PRESET_SAKURAGAWA_MAIN,
-    sakuragawa_exp: PRESET_SAKURAGAWA_EXPRESS,
-    midorikawa_compact: PRESET_MIDORIKAWA_COMPACT,
-    sakuragawa_night: PRESET_SAKURAGAWA_NIGHT
+    midorikawa_compact: PRESET_MIDORIKAWA_COMPACT
   };
 
   presetSelect.addEventListener("change", (e) => {
@@ -1104,6 +1179,22 @@ document.addEventListener("DOMContentLoaded", () => {
     btnQuickLandscape.addEventListener("click", () => {
       hasStickyPreviewSettings = true;
       applyEffectivePagePatch({ orientation: "landscape" });
+    });
+  }
+  if (inputQuickCustomW) {
+    inputQuickCustomW.addEventListener("change", (e) => {
+      hasStickyPreviewSettings = true;
+      const clamped = BoxDiagramDataModel.clampCustomMm(e.target.value, 560, 100, 1800);
+      e.target.value = clamped;
+      applyEffectivePagePatch({ widthMm: clamped });
+    });
+  }
+  if (inputQuickCustomH) {
+    inputQuickCustomH.addEventListener("change", (e) => {
+      hasStickyPreviewSettings = true;
+      const clamped = BoxDiagramDataModel.clampCustomMm(e.target.value, 220, 80, 1200);
+      e.target.value = clamped;
+      applyEffectivePagePatch({ heightMm: clamped });
     });
   }
 

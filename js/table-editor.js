@@ -919,16 +919,33 @@ class BoxDiagramTableEditor {
             </div>
             <div class="form-col">
               <label class="form-label">${isSeparatePage ? '駅軸の用紙の向き:' : '用紙の向き:'}</label>
-              <select class="form-select" id="selectOrientation">
+              <select class="form-select" id="selectOrientation" ${(set.pageSize === 'AUTO' || set.pageSize === 'CUSTOM') ? 'disabled' : ''}>
                 <option value="portrait" ${set.orientation === 'portrait' ? 'selected' : ''}>縦向き (Portrait)</option>
                 <option value="landscape" ${set.orientation === 'landscape' ? 'selected' : ''}>横向き (Landscape)</option>
               </select>
             </div>
           </div>
+          ${set.pageSize === 'AUTO' ? `
+            <div class="text-muted" style="font-size: 11px; margin-top: 6px;">
+              ※ データ量（駅数・時間帯・運用数）に合わせて用紙幅・高さを自動調整します。
+            </div>
+          ` : ''}
+          ${set.pageSize === 'CUSTOM' ? `
+            <div class="form-row-grid" style="margin-top: 8px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+              <div class="form-col">
+                <label class="form-label">用紙幅 (mm):</label>
+                <input type="number" class="form-control font-mono" id="inputCustomPageWidthMm" value="${set.customPageWidthMm || 420}" min="100" max="1800" step="5" />
+              </div>
+              <div class="form-col">
+                <label class="form-label">用紙高さ (mm):</label>
+                <input type="number" class="form-control font-mono" id="inputCustomPageHeightMm" value="${set.customPageHeightMm || 220}" min="80" max="1200" step="5" />
+              </div>
+            </div>
+          ` : ''}
           <div class="form-row" style="margin-top: 10px;">
             <label class="checkbox-simple">
               <input type="checkbox" id="checkSeparatePageByAxis" ${isSeparatePage ? 'checked' : ''} />
-              <span>駅軸と時刻軸で別の用紙サイズ・向きを使う（例: 駅軸はA4縦、時刻軸はA4横やA3横）</span>
+              <span>駅軸と時刻軸で別の用紙サイズ・向きを使う（例: 駅軸はA4縦、時刻軸は変形自動フィット）</span>
             </label>
           </div>
           ${isSeparatePage ? `
@@ -937,18 +954,35 @@ class BoxDiagramTableEditor {
                 <label class="form-label">時刻軸の用紙サイズ:</label>
                 <select class="form-select" id="selectTimeAxisPageSize">
                   ${Object.entries(pageSpecs).map(([key, spec]) => `
-                    <option value="${key}" ${(set.timeAxisPageSize || set.pageSize) === key ? 'selected' : ''}>${this.escapeXml(spec.label)}</option>
+                    <option value="${key}" ${(set.timeAxisPageSize || 'AUTO') === key ? 'selected' : ''}>${this.escapeXml(spec.label)}</option>
                   `).join("")}
                 </select>
               </div>
               <div class="form-col">
                 <label class="form-label">時刻軸の用紙の向き:</label>
-                <select class="form-select" id="selectTimeAxisOrientation">
+                <select class="form-select" id="selectTimeAxisOrientation" ${((set.timeAxisPageSize || 'AUTO') === 'AUTO' || set.timeAxisPageSize === 'CUSTOM') ? 'disabled' : ''}>
                   <option value="portrait" ${set.timeAxisOrientation === 'portrait' ? 'selected' : ''}>縦向き (Portrait)</option>
                   <option value="landscape" ${set.timeAxisOrientation !== 'portrait' ? 'selected' : ''}>横向き (Landscape)</option>
                 </select>
               </div>
             </div>
+            ${(set.timeAxisPageSize || 'AUTO') === 'AUTO' ? `
+              <div class="text-muted" style="font-size: 11px; margin-top: 4px; padding-left: 4px;">
+                ※ 時間帯の長さと運用ブロック数に合わせて横長サイズ・余白なし高さを自動設定します。
+              </div>
+            ` : ''}
+            ${set.timeAxisPageSize === 'CUSTOM' ? `
+              <div class="form-row-grid" style="margin-top: 6px; padding: 8px 10px; background: #f8fafc; border: 1px solid var(--border-subtle); border-radius: 6px;">
+                <div class="form-col">
+                  <label class="form-label">時刻軸の用紙幅 (mm):</label>
+                  <input type="number" class="form-control font-mono" id="inputTimeAxisCustomWidthMm" value="${set.timeAxisCustomWidthMm || 560}" min="100" max="1800" step="5" />
+                </div>
+                <div class="form-col">
+                  <label class="form-label">時刻軸の用紙高さ (mm):</label>
+                  <input type="number" class="form-control font-mono" id="inputTimeAxisCustomHeightMm" value="${set.timeAxisCustomHeightMm || 220}" min="80" max="1200" step="5" />
+                </div>
+              </div>
+            ` : ''}
           ` : ''}
           <div class="form-row" style="margin-top: 10px;">
             <label class="form-label">改ページ方式:</label>
@@ -1598,11 +1632,27 @@ class BoxDiagramTableEditor {
         });
       };
 
-      bindSettingSelect("#selectPageSize", "pageSize");
+      bindSettingSelect("#selectPageSize", "pageSize", v => v, true);
       bindSettingSelect("#selectOrientation", "orientation");
-      bindSettingSelect("#selectTimeAxisPageSize", "timeAxisPageSize");
+      bindSettingSelect("#selectTimeAxisPageSize", "timeAxisPageSize", v => v, true);
       bindSettingSelect("#selectTimeAxisOrientation", "timeAxisOrientation");
       bindSettingSelect("#selectXAxisMode", "xAxisMode");
+
+      const bindCustomMmInput = (selector, key, fallback, minMm, maxMm) => {
+        const el = this.container.querySelector(selector);
+        if (!el) return;
+        el.addEventListener("change", (e) => {
+          const clamped = BoxDiagramDataModel.clampCustomMm(e.target.value, fallback, minMm, maxMm);
+          e.target.value = clamped;
+          this.safeMutate(() => {
+            this.model.updateSettings({ [key]: clamped });
+          });
+        });
+      };
+      bindCustomMmInput("#inputCustomPageWidthMm", "customPageWidthMm", 420, 100, 1800);
+      bindCustomMmInput("#inputCustomPageHeightMm", "customPageHeightMm", 220, 80, 1200);
+      bindCustomMmInput("#inputTimeAxisCustomWidthMm", "timeAxisCustomWidthMm", 560, 100, 1800);
+      bindCustomMmInput("#inputTimeAxisCustomHeightMm", "timeAxisCustomHeightMm", 220, 80, 1200);
       bindSettingSelect("#selectTimeAxisStartHour", "timeAxisStartHour", (v) => {
         const n = parseInt(v, 10);
         return Number.isNaN(n) ? 4 : n;
@@ -1620,7 +1670,7 @@ class BoxDiagramTableEditor {
           const cur = this.model.getSettings();
           const patch = { separatePageSettingsByAxisMode: checked };
           if (checked) {
-            if (!cur.timeAxisPageSize) patch.timeAxisPageSize = cur.pageSize || "A4";
+            if (!cur.timeAxisPageSize) patch.timeAxisPageSize = "AUTO";
             if (!cur.timeAxisOrientation) patch.timeAxisOrientation = "landscape";
           }
           this.safeMutate(() => {

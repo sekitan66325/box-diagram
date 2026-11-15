@@ -17,15 +17,51 @@ class BoxDiagramDataModel {
     this.isApplyingHistory = false;
   }
 
-  // 用紙サイズ定義（すべて 1 : sqrt(2) 比率）
+  // 用紙サイズ定義（標準サイズは 1 : sqrt(2) 比率 ＋ 変形サイズ AUTO / CUSTOM）
   static get PAGE_SPECS() {
     return {
-      A3: { label: "A3 (297 × 420 mm)", baseW: 1123, baseH: 1587, canvasScale: 1.414, mmPortrait: "297mm 420mm", mmLandscape: "420mm 297mm" },
-      B4: { label: "B4 (257 × 364 mm)", baseW: 971, baseH: 1374, canvasScale: 1.224, mmPortrait: "257mm 364mm", mmLandscape: "364mm 257mm" },
-      A4: { label: "A4 (210 × 297 mm)", baseW: 794, baseH: 1123, canvasScale: 1.0, mmPortrait: "A4 portrait", mmLandscape: "A4 landscape" },
-      B5: { label: "B5 (182 × 257 mm)", baseW: 688, baseH: 971, canvasScale: 1.0, mmPortrait: "182mm 257mm", mmLandscape: "257mm 182mm" },
-      A5: { label: "A5 (148 × 210 mm)", baseW: 559, baseH: 794, canvasScale: 0.78, mmPortrait: "148mm 210mm", mmLandscape: "210mm 148mm" },
-      B6: { label: "B6 (128 × 182 mm)", baseW: 484, baseH: 688, canvasScale: 0.72, mmPortrait: "128mm 182mm", mmLandscape: "182mm 128mm" }
+      AUTO: { label: "変形 (自動フィット)", isAuto: true, baseW: 1123, baseH: 794, canvasScale: 1.0, widthMm: 297, heightMm: 210, mmPortrait: "210mm 297mm", mmLandscape: "297mm 210mm" },
+      CUSTOM: { label: "変形 (手動サイズ指定 mm)", isCustom: true, baseW: 1587, baseH: 832, canvasScale: 1.0, widthMm: 220, heightMm: 420, mmPortrait: "220mm 420mm", mmLandscape: "420mm 220mm" },
+      A3: { label: "A3 (297 × 420 mm)", baseW: 1123, baseH: 1587, canvasScale: 1.414, widthMm: 297, heightMm: 420, mmPortrait: "297mm 420mm", mmLandscape: "420mm 297mm" },
+      B4: { label: "B4 (257 × 364 mm)", baseW: 971, baseH: 1374, canvasScale: 1.224, widthMm: 257, heightMm: 364, mmPortrait: "257mm 364mm", mmLandscape: "364mm 257mm" },
+      A4: { label: "A4 (210 × 297 mm)", baseW: 794, baseH: 1123, canvasScale: 1.0, widthMm: 210, heightMm: 297, mmPortrait: "A4 portrait", mmLandscape: "A4 landscape" },
+      B5: { label: "B5 (182 × 257 mm)", baseW: 688, baseH: 971, canvasScale: 1.0, widthMm: 182, heightMm: 257, mmPortrait: "182mm 257mm", mmLandscape: "257mm 182mm" },
+      A5: { label: "A5 (148 × 210 mm)", baseW: 559, baseH: 794, canvasScale: 0.78, widthMm: 148, heightMm: 210, mmPortrait: "148mm 210mm", mmLandscape: "210mm 148mm" },
+      B6: { label: "B6 (128 × 182 mm)", baseW: 484, baseH: 688, canvasScale: 0.72, widthMm: 128, heightMm: 182, mmPortrait: "128mm 182mm", mmLandscape: "182mm 128mm" }
+    };
+  }
+
+  static clampCustomMm(val, fallback, minMm = 80, maxMm = 1800) {
+    const num = typeof val === "number" ? val : parseFloat(val);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(minMm, Math.min(maxMm, Math.round(num)));
+  }
+
+  /**
+   * 任意ミリ寸法 (widthMm × heightMm) から CSS px・SVGキャンバス論理座標・@page寸法を算出
+   */
+  static computeDimensionsFromMm(widthMm, heightMm) {
+    const wMm = BoxDiagramDataModel.clampCustomMm(widthMm, 420, 100, 1800);
+    const hMm = BoxDiagramDataModel.clampCustomMm(heightMm, 220, 80, 1200);
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const SVG_PX_PER_MM = 5.345;
+    const CSS_PX_PER_MM = 96 / 25.4;
+    const baseW = Math.round(wMm * CSS_PX_PER_MM);
+    const baseH = Math.round(hMm * CSS_PX_PER_MM);
+    const canvasW = round2(wMm * SVG_PX_PER_MM);
+    const canvasH = round2(hMm * SVG_PX_PER_MM);
+    const isLandscape = wMm >= hMm;
+    return {
+      widthMm: wMm,
+      heightMm: hMm,
+      orientation: isLandscape ? "landscape" : "portrait",
+      isLandscape,
+      baseW,
+      baseH,
+      canvasW,
+      canvasH,
+      canvasScale: 1.0,
+      cssPageSize: `${wMm}mm ${hMm}mm`
     };
   }
 
@@ -37,14 +73,54 @@ class BoxDiagramDataModel {
     const specs = BoxDiagramDataModel.PAGE_SPECS;
     const xAxisMode = s.xAxisMode === "time" ? "time" : "station";
     const isSeparateMode = !!s.separatePageSettingsByAxisMode;
+    const isSeparateTime = isSeparateMode && xAxisMode === "time";
 
-    const rawSize = (isSeparateMode && xAxisMode === "time")
-      ? (s.timeAxisPageSize || s.pageSize || "A4")
+    const rawSize = isSeparateTime
+      ? (s.timeAxisPageSize || s.pageSize || "AUTO")
       : (s.pageSize || "A4");
     const pageSize = specs[rawSize] ? rawSize : "A4";
     const spec = specs[pageSize];
 
-    const rawOrient = (isSeparateMode && xAxisMode === "time")
+    if (pageSize === "CUSTOM") {
+      const customW = BoxDiagramDataModel.clampCustomMm(
+        isSeparateTime ? s.timeAxisCustomWidthMm : s.customPageWidthMm,
+        isSeparateTime ? 560 : 420,
+        100,
+        1800
+      );
+      const customH = BoxDiagramDataModel.clampCustomMm(
+        isSeparateTime ? s.timeAxisCustomHeightMm : s.customPageHeightMm,
+        220,
+        80,
+        1200
+      );
+      const dims = BoxDiagramDataModel.computeDimensionsFromMm(customW, customH);
+      return Object.assign({
+        xAxisMode,
+        isSeparateMode,
+        pageSize: "CUSTOM",
+        spec,
+        isAutoPageSize: false,
+        isCustomPageSize: true
+      }, dims);
+    }
+
+    if (pageSize === "AUTO") {
+      // レンダラーの resolveAutoPagePagesAndGeometry が実内容で最終決定する（ここはフォールバック仮寸法）
+      const provisionalW = xAxisMode === "time" ? 420 : 210;
+      const provisionalH = xAxisMode === "time" ? 210 : 297;
+      const dims = BoxDiagramDataModel.computeDimensionsFromMm(provisionalW, provisionalH);
+      return Object.assign({
+        xAxisMode,
+        isSeparateMode,
+        pageSize: "AUTO",
+        spec,
+        isAutoPageSize: true,
+        isCustomPageSize: false
+      }, dims);
+    }
+
+    const rawOrient = isSeparateTime
       ? (s.timeAxisOrientation || "landscape")
       : (s.orientation || "portrait");
     const orientation = rawOrient === "landscape" ? "landscape" : "portrait";
@@ -52,6 +128,8 @@ class BoxDiagramDataModel {
     const isLandscape = orientation === "landscape";
     const baseW = isLandscape ? spec.baseH : spec.baseW;
     const baseH = isLandscape ? spec.baseW : spec.baseH;
+    const widthMm = isLandscape ? spec.heightMm : spec.widthMm;
+    const heightMm = isLandscape ? spec.widthMm : spec.heightMm;
     const baseSvgW = isLandscape ? 1587.36 : 1122.56;
     const baseSvgH = isLandscape ? 1122.56 : 1587.36;
     const canvasScale = spec.canvasScale || 1.0;
@@ -67,12 +145,16 @@ class BoxDiagramDataModel {
       orientation,
       isLandscape,
       spec,
+      widthMm,
+      heightMm,
       baseW,
       baseH,
       canvasW,
       canvasH,
       canvasScale,
-      cssPageSize
+      cssPageSize,
+      isAutoPageSize: false,
+      isCustomPageSize: false
     };
   }
 
@@ -90,7 +172,14 @@ class BoxDiagramDataModel {
     const specs = BoxDiagramDataModel.PAGE_SPECS;
     const rawSet = raw.settings || {};
     const normPageSize = specs[rawSet.pageSize] ? rawSet.pageSize : "A4";
-    const normTimePageSize = specs[rawSet.timeAxisPageSize] ? rawSet.timeAxisPageSize : normPageSize;
+    const normTimePageSize = specs[rawSet.timeAxisPageSize] ? rawSet.timeAxisPageSize : "AUTO";
+    const normSeparatePage = typeof rawSet.separatePageSettingsByAxisMode === "boolean"
+      ? rawSet.separatePageSettingsByAxisMode
+      : true;
+    const normCustomW = BoxDiagramDataModel.clampCustomMm(rawSet.customPageWidthMm, 420, 100, 1800);
+    const normCustomH = BoxDiagramDataModel.clampCustomMm(rawSet.customPageHeightMm, 220, 80, 1200);
+    const normTimeCustomW = BoxDiagramDataModel.clampCustomMm(rawSet.timeAxisCustomWidthMm, 560, 100, 1800);
+    const normTimeCustomH = BoxDiagramDataModel.clampCustomMm(rawSet.timeAxisCustomHeightMm, 220, 80, 1200);
     const normStartHour = (typeof rawSet.timeAxisStartHour === "number" && !Number.isNaN(rawSet.timeAxisStartHour))
       ? Math.max(0, Math.min(12, Math.round(rawSet.timeAxisStartHour)))
       : 4;
@@ -104,7 +193,7 @@ class BoxDiagramDataModel {
     const d = {
       version: raw.version || "2.0",
       metadata: Object.assign({
-        title: "桜川電鉄 サクラ2000形 (全機能サンプル)",
+        title: "桜川電鉄 1日通しダイヤ（始発〜深夜・全機能サンプル）",
         copyright: "(C) 2026 せきたん",
         updatedAt: new Date().toISOString().split("T")[0]
       }, raw.metadata || {}),
@@ -124,9 +213,13 @@ class BoxDiagramDataModel {
         symbolFill: "preset",
         autoSyncCoupled: true,
         xAxisMode: "station",
-        separatePageSettingsByAxisMode: false,
+        separatePageSettingsByAxisMode: normSeparatePage,
         timeAxisPageSize: normTimePageSize,
         timeAxisOrientation: "landscape",
+        customPageWidthMm: normCustomW,
+        customPageHeightMm: normCustomH,
+        timeAxisCustomWidthMm: normTimeCustomW,
+        timeAxisCustomHeightMm: normTimeCustomH,
         timeAxisStartHour: normStartHour,
         timeAxisRangeMode: "auto",
         timeAxisEndHour: normEndHour,
@@ -137,9 +230,13 @@ class BoxDiagramDataModel {
         pageSize: normPageSize,
         orientation: rawSet.orientation === "landscape" ? "landscape" : "portrait",
         xAxisMode: rawSet.xAxisMode === "time" ? "time" : "station",
-        separatePageSettingsByAxisMode: !!rawSet.separatePageSettingsByAxisMode,
+        separatePageSettingsByAxisMode: normSeparatePage,
         timeAxisPageSize: normTimePageSize,
         timeAxisOrientation: rawSet.timeAxisOrientation === "portrait" ? "portrait" : "landscape",
+        customPageWidthMm: normCustomW,
+        customPageHeightMm: normCustomH,
+        timeAxisCustomWidthMm: normTimeCustomW,
+        timeAxisCustomHeightMm: normTimeCustomH,
         timeAxisStartHour: normStartHour,
         timeAxisRangeMode: rawSet.timeAxisRangeMode === "manual" ? "manual" : "auto",
         timeAxisEndHour: normEndHour,

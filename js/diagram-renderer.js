@@ -43,31 +43,131 @@ class BoxDiagramRenderer {
   renderPages(data) {
     this.lastDiagnostics = null;
     if (!data || !data.rosters || data.rosters.length === 0) {
-      return [{ pageIndex: 1, totalPages: 1, svgHtml: this.renderEmptySvg(data) }];
+      return [{ pageIndex: 1, totalPages: 1, svgHtml: this.renderEmptySvg(data), pageConfig: null }];
     }
 
-    const geom = this.getPageGeometry(data);
-    const timeRange = geom.xAxisMode === "time" ? this.computeTimeAxisRange(data) : null;
+    const rawCfg = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.getEffectivePageConfig)
+      ? BoxDiagramDataModel.getEffectivePageConfig(data.settings)
+      : null;
+    const timeRange = (rawCfg ? rawCfg.xAxisMode : (data.settings && data.settings.xAxisMode)) === "time"
+      ? this.computeTimeAxisRange(data)
+      : null;
+
+    let geom;
+    let pages;
+    if (rawCfg && rawCfg.isAutoPageSize) {
+      const autoPlan = this.resolveAutoLayout(data, rawCfg, timeRange);
+      geom = autoPlan.geom;
+      pages = autoPlan.pages;
+    } else {
+      geom = this.getPageGeometry(data, rawCfg);
+      pages = this.paginateRosters(data, geom);
+    }
+
     const diagAcc = {
       omittedTimeLabelCount: 0,
       multiLaneRosterCount: 0,
-      labelOverlapCount: 0
+      labelOverlapCount: 0,
+      maxContentBottomY: 0
     };
 
-    // ページの分割（自動改ページ / 手動改ページ）
-    const pages = this.paginateRosters(data, geom);
     const totalPages = pages.length;
 
     const result = pages.map((pageRosters, pIdx) => {
       const pageIndex = pIdx + 1;
       const svgHtml = geom.xAxisMode === "time"
         ? this.renderTimeAxisSinglePage(data, pageRosters, pageIndex, totalPages, geom, timeRange, diagAcc)
-        : this.renderSinglePage(data, pageRosters, pageIndex, totalPages, geom);
-      return { pageIndex, totalPages, svgHtml };
+        : this.renderSinglePage(data, pageRosters, pageIndex, totalPages, geom, diagAcc);
+      return { pageIndex, totalPages, svgHtml, pageConfig: geom.pageConfig };
     });
 
     this.lastDiagnostics = this.buildLayoutDiagnostics(data, geom, timeRange, totalPages, diagAcc);
     return result;
+  }
+
+  /**
+   * 変形（自動フィット）モード時に、時間帯／駅数と運用ブロック実高さから最適な用紙寸法(mm)を算出
+   */
+  resolveAutoLayout(data, rawCfg, timeRange) {
+    const xAxisMode = rawCfg.xAxisMode === "time" ? "time" : "station";
+    let autoWidthMm = 297;
+
+    if (xAxisMode === "time" && timeRange) {
+      const hours = Math.max(4, timeRange.endHour - timeRange.startHour);
+      let totalTrains = 0;
+      let shortTrains = 0;
+      const dayStartMin = timeRange.dayStartMin;
+      for (const r of (data.rosters || [])) {
+        for (const tr of (r.trains || [])) {
+          const dm = this._parseTimeAxisMinutes(tr.depTime, dayStartMin);
+          const am0 = this._parseTimeAxisMinutes(tr.arrTime, dayStartMin);
+          if (dm !== null && am0 !== null) {
+            const am = (am0 < dm && am0 + 1440 - dm <= 720) ? am0 + 1440 : am0;
+            const dur = Math.max(0, am - dm);
+            totalTrains++;
+            if (dur <= 22) shortTrains++;
+          }
+        }
+      }
+      const shortRatio = totalTrains > 0 ? shortTrains / totalTrains : 0;
+      const densityFull = !!(data.settings && data.settings.timeAxisLabelDensity === "full");
+      let targetPxPerHour = 135;
+      if (densityFull) {
+        targetPxPerHour = 165;
+      } else if (shortRatio >= 0.4 || hours <= 10) {
+        targetPxPerHour = 155;
+      }
+      const rawCanvasW = hours * targetPxPerHour + 245.92;
+      const rawMmW = rawCanvasW / 5.345;
+      autoWidthMm = Math.max(297, Math.min(1400, Math.ceil(rawMmW / 5) * 5));
+    } else {
+      const visibleStations = (data.stations || []).filter(s => s.visible !== false);
+      if (visibleStations.length <= 4) {
+        autoWidthMm = 210;
+      } else {
+        autoWidthMm = Math.max(210, Math.min(1000, Math.ceil((75 + Math.max(1, visibleStations.length - 1) * 52) / 5) * 5));
+      }
+    }
+
+    // 最大印刷高さ上限 (380mm) 基準で改ページを計算し、実内容高さを測る
+    const AUTO_MAX_HEIGHT_MM = 380;
+    const capDims = BoxDiagramDataModel.computeDimensionsFromMm(autoWidthMm, AUTO_MAX_HEIGHT_MM);
+    const capCfg = Object.assign({}, rawCfg, capDims, { isAutoPageSize: true, isCustomPageSize: false });
+    const capGeom = this.getPageGeometry(data, capCfg);
+    const pages = this.paginateRosters(data, capGeom);
+
+    let maxNeededHeightMm = 115;
+    const visibleNotes = (data.notes || []).filter(n => (n.axisMode === "time" ? "time" : "station") === xAxisMode);
+
+    for (let pIdx = 0; pIdx < pages.length; pIdx++) {
+      const pageRosters = pages[pIdx];
+      const pageNum = pIdx + 1;
+      let bottomY = capGeom.headerBottom + capGeom.borderWidth;
+      for (let i = 0; i < pageRosters.length; i++) {
+        bottomY += xAxisMode === "time"
+          ? this.calculateTimeAxisRosterBlockHeight(data, pageRosters[i], i === 0)
+          : this.calculateRosterBlockHeight(data, pageRosters[i], i === 0);
+      }
+
+      let contentEndY = bottomY;
+      for (const n of visibleNotes) {
+        const np = (n.page === "all" || n.page === undefined) ? "all" : (typeof n.page === "number" ? n.page : parseInt(n.page, 10));
+        if (np !== "all" && np !== pageNum) continue;
+        if (Number.isFinite(n.y) && n.y <= capGeom.H - 40) {
+          const nf = Number.isFinite(n.fontSize) ? n.fontSize : 10.72;
+          contentEndY = Math.max(contentEndY, n.y + nf * 0.4 + 8);
+        }
+      }
+
+      const neededCanvasH = contentEndY + 72.0;
+      const neededMm = Math.ceil((neededCanvasH / 5.345) / 5) * 5;
+      maxNeededHeightMm = Math.max(maxNeededHeightMm, Math.min(420, neededMm));
+    }
+
+    const finalDims = BoxDiagramDataModel.computeDimensionsFromMm(autoWidthMm, maxNeededHeightMm);
+    const finalCfg = Object.assign({}, rawCfg, finalDims, { isAutoPageSize: true, isCustomPageSize: false });
+    const geom = this.getPageGeometry(data, finalCfg);
+    return { geom, pages };
   }
 
   /**
@@ -81,9 +181,9 @@ class BoxDiagramRenderer {
    * 現在の設定から論理SVGキャンバス＆枠座標を解決する
    * （A4・B5縦向きでは従来座標と0.00px完全一致を維持）
    */
-  getPageGeometry(data) {
+  getPageGeometry(data, overridePageCfg = null) {
     const settings = (data && data.settings) || {};
-    const cfg = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.getEffectivePageConfig)
+    const cfg = overridePageCfg || ((typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.getEffectivePageConfig)
       ? BoxDiagramDataModel.getEffectivePageConfig(settings)
       : {
           xAxisMode: settings.xAxisMode === "time" ? "time" : "station",
@@ -93,15 +193,18 @@ class BoxDiagramRenderer {
           isLandscape: settings.orientation === "landscape",
           canvasW: settings.orientation === "landscape" ? 1587.36 : 1122.56,
           canvasH: settings.orientation === "landscape" ? 1122.56 : 1587.36,
-          canvasScale: 1.0
-        };
+          canvasScale: 1.0,
+          isAutoPageSize: false,
+          isCustomPageSize: false
+        });
 
     const round2 = (v) => Math.round(v * 100) / 100;
     const W = cfg.canvasW;
     const H = cfg.canvasH;
     const isLandscape = cfg.isLandscape;
-    const isExactClassicA4B5Portrait = (cfg.canvasScale === 1.0 && !isLandscape);
-    const isCompact = cfg.canvasScale < 0.9;
+    const isDynamicSize = !!(cfg.isAutoPageSize || cfg.isCustomPageSize);
+    const isExactClassicA4B5Portrait = (!isDynamicSize && cfg.canvasScale === 1.0 && !isLandscape);
+    const isCompact = !isDynamicSize && cfg.canvasScale < 0.9;
 
     const borderWidth = 2.56;
     const tableLeft = isCompact ? 38.0 : 53.92;
@@ -112,9 +215,11 @@ class BoxDiagramRenderer {
     const headerBottom = 98.72;
     const Y_MAX = isExactClassicA4B5Portrait
       ? 1420.0
-      : round2(H - (isCompact ? 112.0 : 167.36));
+      : (isDynamicSize ? round2(H - 72.0) : round2(H - (isCompact ? 112.0 : 167.36)));
     const footerX = isExactClassicA4B5Portrait ? 550.72 : round2(W / 2);
-    const footerY = isExactClassicA4B5Portrait ? 1552.96 : round2(H - (isCompact ? 26.0 : 34.40));
+    const footerY = isExactClassicA4B5Portrait
+      ? 1552.96
+      : (isDynamicSize ? round2(H - 28.0) : round2(H - (isCompact ? 26.0 : 34.40)));
 
     const stationPlotLeft = isExactClassicA4B5Portrait ? 200.32 : round2(tableInnerX + (isCompact ? 56.0 : 80.0));
     const stationPlotRight = isExactClassicA4B5Portrait ? 987.52 : round2(tableRight - (isCompact ? 54.0 : 77.44));
@@ -123,11 +228,13 @@ class BoxDiagramRenderer {
     const timePlotRight = round2(tableRight - (isCompact ? 24.0 : 34.0));
 
     return {
+      pageConfig: cfg,
       xAxisMode: cfg.xAxisMode,
       isSeparateMode: cfg.isSeparateMode,
       pageSize: cfg.pageSize,
       orientation: cfg.orientation,
       isLandscape,
+      isDynamicSize,
       canvasScale: cfg.canvasScale,
       W,
       H,
@@ -161,7 +268,7 @@ class BoxDiagramRenderer {
     const mode = settings.pageBreakMode || "auto";
     const rosters = data.rosters;
 
-    if (mode === "manual") {
+    if (mode === "manual" && g.xAxisMode !== "time") {
       const pages = [];
       let currentPage = [];
       for (let i = 0; i < rosters.length; i++) {
@@ -190,7 +297,8 @@ class BoxDiagramRenderer {
         ? this.calculateTimeAxisRosterBlockHeight(data, roster, isFirst)
         : this.calculateRosterBlockHeight(data, roster, isFirst);
 
-      if (!isFirst && (currentY + blockHeight > Y_MAX || roster.pageBreakAfter)) {
+      const forceBreak = g.xAxisMode !== "time" && !!roster.pageBreakAfter;
+      if (!isFirst && (currentY + blockHeight > Y_MAX || forceBreak)) {
         pages.push(currentPage);
         currentPage = [roster];
         const nextBlockHeight = g.xAxisMode === "time"
@@ -342,7 +450,7 @@ class BoxDiagramRenderer {
   /**
    * 単一ページのSVG描画（横軸＝駅モード）
    */
-  renderSinglePage(data, pageRosters, pageIndex, totalPages, geomArg = null) {
+  renderSinglePage(data, pageRosters, pageIndex, totalPages, geomArg = null, diagAcc = null) {
     const geom = geomArg || this.getPageGeometry(data);
     const settings = data.settings || {};
     const R = typeof settings.baseRowHeight === "number" ? settings.baseRowHeight : 12.96;
@@ -612,6 +720,9 @@ class BoxDiagramRenderer {
       prevBlockBorderBottom = blockBottomBorderBottom;
     }
 
+    if (diagAcc) {
+      diagAcc.maxContentBottomY = Math.max(diagAcc.maxContentBottomY || 0, prevBlockBorderBottom);
+    }
     return this.finalizeSvgPage(elements, data, geom, prevBlockBorderBottom, pageIndex, totalPages, "station");
   }
 
@@ -1111,6 +1222,9 @@ class BoxDiagramRenderer {
       prevBlockBorderBottom = blockBottomBorderBottom;
     }
 
+    if (diagAcc) {
+      diagAcc.maxContentBottomY = Math.max(diagAcc.maxContentBottomY || 0, prevBlockBorderBottom);
+    }
     return this.finalizeSvgPage(elements, data, geom, prevBlockBorderBottom, pageIndex, totalPages, "time");
   }
 
@@ -1364,6 +1478,7 @@ class BoxDiagramRenderer {
       pageSize: geom.pageSize,
       orientation: geom.orientation,
       isSeparateMode: geom.isSeparateMode,
+      effectivePageConfig: geom.pageConfig || null,
       totalPages,
       omittedTimeLabelCount: diagAcc.omittedTimeLabelCount,
       multiLaneRosterCount: diagAcc.multiLaneRosterCount,
@@ -1380,59 +1495,88 @@ class BoxDiagramRenderer {
       return (idx >= 0 && idx < order.length - 1) ? order[idx + 1] : null;
     };
 
+    const isAuto = !!(geom.pageConfig && geom.pageConfig.isAutoPageSize);
+    const isCustom = !!(geom.pageConfig && geom.pageConfig.isCustomPageSize);
+
     if (geom.xAxisMode === "time" && timeRange) {
       const hours = Math.max(1, timeRange.endHour - timeRange.startHour);
       const pxPerHour = (geom.timePlotRight - geom.timePlotLeft) / hours;
       diag.pxPerHour = Math.round(pxPerHour * 10) / 10;
 
-      if (!geom.isLandscape && (pxPerHour < 58 || diagAcc.omittedTimeLabelCount > 0 || diagAcc.labelOverlapCount > 0 || geom.canvasScale < 0.9)) {
-        const actions = [
-          {
-            id: "set-time-a4-landscape",
-            label: "時間軸だけ A4横 にする（推奨）",
-            patch: { separatePageSettingsByAxisMode: true, timeAxisPageSize: "A4", timeAxisOrientation: "landscape" }
-          },
-          {
-            id: "set-orientation-landscape",
-            label: "共通向きを 横 に変更",
-            patch: geom.isSeparateMode ? { timeAxisOrientation: "landscape" } : { orientation: "landscape" }
+      if (!isAuto && !isCustom) {
+        const autoFitPatch = geom.isSeparateMode
+          ? { timeAxisPageSize: "AUTO" }
+          : { separatePageSettingsByAxisMode: true, timeAxisPageSize: "AUTO" };
+
+        if (!geom.isLandscape && (pxPerHour < 58 || diagAcc.omittedTimeLabelCount > 0 || diagAcc.labelOverlapCount > 0 || geom.canvasScale < 0.9)) {
+          const actions = [
+            {
+              id: "set-time-auto-fit",
+              label: "時間軸を 変形(自動) にする（推奨）",
+              patch: autoFitPatch
+            },
+            {
+              id: "set-time-a4-landscape",
+              label: "A4横 にする",
+              patch: { separatePageSettingsByAxisMode: true, timeAxisPageSize: "A4", timeAxisOrientation: "landscape" }
+            },
+            {
+              id: "set-orientation-landscape",
+              label: "共通向きを 横 に変更",
+              patch: geom.isSeparateMode ? { timeAxisOrientation: "landscape" } : { orientation: "landscape" }
+            }
+          ];
+          diag.suggestion = {
+            key: `time-portrait-narrow-${geom.pageSize}-${geom.orientation}`,
+            message: `縦向き用紙では横幅がやや狭く（1時間あたり約 ${Math.round(pxPerHour)}px${diagAcc.omittedTimeLabelCount > 0 ? `・過密により時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : ""}）、文字が詰まりやすい状態です。横長・変形（自動フィット）をおすすめします。`,
+            actions
+          };
+        } else if (diagAcc.omittedTimeLabelCount >= 2 || diagAcc.labelOverlapCount >= 2 || pxPerHour < 85) {
+          const actions = [
+            {
+              id: "set-time-auto-fit",
+              label: "変形(自動フィット) にする（推奨）",
+              patch: autoFitPatch
+            }
+          ];
+          const bigger = nextBiggerSize(geom.pageSize);
+          if (bigger) {
+            actions.push({
+              id: `upgrade-to-${bigger}`,
+              label: `${bigger} ${geom.isLandscape ? "横" : "縦"}にする`,
+              patch: geom.isSeparateMode ? { timeAxisPageSize: bigger } : { pageSize: bigger }
+            });
           }
-        ];
-        if (diagAcc.omittedTimeLabelCount >= 4 || pxPerHour < 40) {
-          actions.push({
-            id: "set-time-a3-landscape",
-            label: "A3横 にする",
-            patch: { separatePageSettingsByAxisMode: true, timeAxisPageSize: "A3", timeAxisOrientation: "landscape" }
-          });
-        }
-        diag.suggestion = {
-          key: `time-portrait-narrow-${geom.pageSize}-${geom.orientation}`,
-          message: `縦向き用紙では横幅がやや狭く（1時間あたり約 ${Math.round(pxPerHour)}px${diagAcc.omittedTimeLabelCount > 0 ? `・過密により時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : ""}）、文字が詰まりやすい状態です。横向き用紙をおすすめします。`,
-          actions
-        };
-      } else if (diagAcc.omittedTimeLabelCount >= 3 || diagAcc.labelOverlapCount >= 2 || pxPerHour < 50) {
-        const bigger = nextBiggerSize(geom.pageSize);
-        if (bigger) {
-          const patch = geom.isSeparateMode
-            ? { timeAxisPageSize: bigger }
-            : { pageSize: bigger };
           diag.suggestion = {
             key: `time-size-crowded-${geom.pageSize}-${geom.orientation}`,
-            message: `短区間列車や運行時間帯が長く表示が過密です（${diagAcc.omittedTimeLabelCount > 0 ? `時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : `約 ${Math.round(pxPerHour)}px/時間`}）。用紙を ${bigger} に広げると余裕をもって表示できます。`,
-            actions: [
-              { id: `upgrade-to-${bigger}`, label: `${bigger} ${geom.isLandscape ? "横" : "縦"}にする`, patch }
-            ]
+            message: `運行時間帯が長く定型用紙では横幅が窮屈です（${diagAcc.omittedTimeLabelCount > 0 ? `時刻 ${diagAcc.omittedTimeLabelCount} 件省略` : `約 ${Math.round(pxPerHour)}px/時間`}）。時間帯に合わせて横幅を広げる「変形（自動フィット）」をおすすめします。`,
+            actions
           };
+        } else if (totalPages === 1 && diagAcc.maxContentBottomY > 0) {
+          const verticalFillRatio = diagAcc.maxContentBottomY / Math.max(1, geom.Y_MAX);
+          if (verticalFillRatio < 0.45) {
+            diag.suggestion = {
+              key: `time-vertical-excess-${geom.pageSize}-${geom.orientation}`,
+              message: `定型用紙では縦方向の余白が多く残っています（縦使用率 約 ${Math.round(verticalFillRatio * 100)}%）。運用数に合わせて高さを詰める「変形（自動フィット）」もおすすめです。`,
+              actions: [
+                {
+                  id: "set-time-auto-fit-trim",
+                  label: "変形(自動フィット) で余白を詰める（推奨）",
+                  patch: autoFitPatch
+                }
+              ]
+            };
+          }
         }
       }
-    } else if (geom.xAxisMode === "station") {
+    } else if (geom.xAxisMode === "station" && !isAuto && !isCustom) {
       if (visibleStations.length >= 2) {
         const xs = visibleStations.map(s => this.mapStationXToCanvas(s.x, geom)).sort((a, b) => a - b);
         let minGap = Infinity;
         for (let i = 1; i < xs.length; i++) minGap = Math.min(minGap, xs[i] - xs[i - 1]);
         diag.stationMinGapPx = Math.round(minGap * 10) / 10;
 
-        if ((geom.canvasScale < 0.9 && visibleStations.length >= 4) || (!geom.isLandscape && minGap < 120)) {
+        if ((geom.canvasScale < 0.9 && visibleStations.length >= 4) || (!geom.isLandscape && minGap < 120) || visibleStations.length >= 6) {
           const actions = [];
           if (!geom.isLandscape) {
             actions.push({
@@ -1447,6 +1591,13 @@ class BoxDiagramRenderer {
               id: `station-size-${bigger}`,
               label: `${bigger} にする`,
               patch: { pageSize: bigger }
+            });
+          }
+          if (visibleStations.length >= 5) {
+            actions.push({
+              id: "station-auto-fit",
+              label: "変形(自動フィット) にする",
+              patch: { pageSize: "AUTO" }
             });
           }
           if (actions.length > 0) {
