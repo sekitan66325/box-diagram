@@ -425,15 +425,55 @@ class BoxDiagramTableEditor {
     this.render();
   }
 
+  _captureFocusSelector() {
+    const active = document.activeElement;
+    if (!active || !this.container.contains(active)) return null;
+    const esc = (s) => (window.CSS && typeof window.CSS.escape === "function") ? window.CSS.escape(String(s)) : String(s).replace(/["\\]/g, "\\$&");
+    if (active.id) return `#${esc(active.id)}`;
+    if (active.dataset.field) {
+      const tr = active.closest("tr[data-train-idx]");
+      if (tr) return `#trainsGridTable tr[data-train-idx="${esc(tr.dataset.trainIdx)}"] [data-field="${esc(active.dataset.field)}"]`;
+    }
+    if (active.dataset.rosterField) {
+      const tr = active.closest("tr[data-roster-id]");
+      if (tr) return `#rostersGridTable tr[data-roster-id="${esc(tr.dataset.rosterId)}"] [data-roster-field="${esc(active.dataset.rosterField)}"]`;
+    }
+    if (active.dataset.stationField) {
+      const tr = active.closest("tr[data-station-id]");
+      if (tr) return `#stationsGridTable tr[data-station-id="${esc(tr.dataset.stationId)}"] [data-station-field="${esc(active.dataset.stationField)}"]`;
+    }
+    if (active.dataset.noteField) {
+      const tr = active.closest("tr[data-note-id]");
+      if (tr) return `#notesGridTable tr[data-note-id="${esc(tr.dataset.noteId)}"] [data-note-field="${esc(active.dataset.noteField)}"]`;
+    }
+    if (active.dataset.typeField) {
+      const tr = active.closest("tr[data-type-id]");
+      if (tr) return `#typesGridTable tr[data-type-id="${esc(tr.dataset.typeId)}"] [data-type-field="${esc(active.dataset.typeField)}"]`;
+    }
+    return null;
+  }
+
   render() {
     this.closeFloatingPopover();
     const data = this.model.getData();
     if (!data) return;
 
-    const prevScrollEl = this.container.querySelector(".table-scroll-container");
+    const scrollSelector = ".table-scroll-container, .form-settings-container, .json-textarea, .raw-json-container";
     const keepScroll = this._lastRenderTab === this.activeTab && this._lastRenderRosterId === this.activeRosterId;
+    const prevScrollEl = this.container.querySelector(scrollSelector);
+    const prevBodyEl = this.container.querySelector(".editor-body");
+    const prevPaneEl = this.container.closest(".editor-pane");
     const prevScrollTop = (keepScroll && prevScrollEl) ? prevScrollEl.scrollTop : 0;
     const prevScrollLeft = (keepScroll && prevScrollEl) ? prevScrollEl.scrollLeft : 0;
+    const prevBodyTop = (keepScroll && prevBodyEl) ? prevBodyEl.scrollTop : 0;
+    const prevBodyLeft = (keepScroll && prevBodyEl) ? prevBodyEl.scrollLeft : 0;
+    const prevContainerTop = keepScroll ? this.container.scrollTop : 0;
+    const prevContainerLeft = keepScroll ? this.container.scrollLeft : 0;
+    const prevPaneTop = (keepScroll && prevPaneEl) ? prevPaneEl.scrollTop : 0;
+    const prevPaneLeft = (keepScroll && prevPaneEl) ? prevPaneEl.scrollLeft : 0;
+    const prevWinX = window.scrollX || 0;
+    const prevWinY = window.scrollY || 0;
+    const focusSelector = keepScroll ? this._captureFocusSelector() : null;
 
     const animateClass = this._animateNextBody ? "anim-panel-enter" : "";
     this._animateNextBody = false;
@@ -485,10 +525,37 @@ class BoxDiagramTableEditor {
 
     this.bindEvents();
 
-    const newScrollEl = this.container.querySelector(".table-scroll-container");
-    if (newScrollEl && keepScroll) {
-      newScrollEl.scrollTop = prevScrollTop;
-      newScrollEl.scrollLeft = prevScrollLeft;
+    const newScrollEl = this.container.querySelector(scrollSelector);
+    const newBodyEl = this.container.querySelector(".editor-body");
+    const restoreScrollPositions = () => {
+      if (!keepScroll) return;
+      if (newScrollEl) {
+        newScrollEl.scrollTop = prevScrollTop;
+        newScrollEl.scrollLeft = prevScrollLeft;
+      }
+      if (newBodyEl) {
+        newBodyEl.scrollTop = prevBodyTop;
+        newBodyEl.scrollLeft = prevBodyLeft;
+      }
+      this.container.scrollTop = prevContainerTop;
+      this.container.scrollLeft = prevContainerLeft;
+      if (prevPaneEl) {
+        prevPaneEl.scrollTop = prevPaneTop;
+        prevPaneEl.scrollLeft = prevPaneLeft;
+      }
+      if ((window.scrollX || 0) !== prevWinX || (window.scrollY || 0) !== prevWinY) {
+        window.scrollTo(prevWinX, prevWinY);
+      }
+    };
+    restoreScrollPositions();
+    if (focusSelector && !this._flashTarget) {
+      try {
+        const refocusEl = this.container.querySelector(focusSelector);
+        if (refocusEl && !refocusEl.disabled && typeof refocusEl.focus === "function") {
+          refocusEl.focus({ preventScroll: true });
+          restoreScrollPositions();
+        }
+      } catch (_) { /* ignore invalid selector */ }
     }
 
     this._syncSelectAllStates();
@@ -1720,14 +1787,14 @@ class BoxDiagramTableEditor {
                 <option value="abbr_only" ${set.depotTextFormat === 'abbr_only' ? 'selected' : ''}>駅略称のみ</option>
               </select>
             </div>
-            <div class="form-col">
-              <label class="form-label">黒記号（●／▲）の扱い:</label>
-              <select class="form-select" id="selectDepotFilledPolicy">
-                <option value="ends_only" ${(set.depotFilledPolicy || 'ends_only') === 'ends_only' ? 'selected' : ''}>運用端のみ対象（標準・推奨）</option>
-                <option value="exclude" ${set.depotFilledPolicy === 'exclude' ? 'selected' : ''}>○／△のみ（●／▲は除外）</option>
-                <option value="all" ${set.depotFilledPolicy === 'all' ? 'selected' : ''}>○●／△▲すべて対象</option>
-              </select>
-            </div>
+          </div>
+          <div class="form-row" style="margin-top: 8px;">
+            <label class="form-label">黒記号（●／▲）の扱い:</label>
+            <select class="form-select" id="selectDepotFilledPolicy">
+              <option value="ends_only" ${(set.depotFilledPolicy || 'ends_only') === 'ends_only' ? 'selected' : ''}>運用端のみ対象（標準・推奨）</option>
+              <option value="exclude" ${set.depotFilledPolicy === 'exclude' ? 'selected' : ''}>○／△のみ（●／▲は除外）</option>
+              <option value="all" ${set.depotFilledPolicy === 'all' ? 'selected' : ''}>○●／△▲すべて対象</option>
+            </select>
           </div>
           <div class="form-row-grid" style="margin-top: 8px;">
             <div class="form-col">
@@ -2952,7 +3019,19 @@ class BoxDiagramTableEditor {
       bindSettingSelect("#selectDepotDisplayScope", "depotDisplayScope");
       bindSettingSelect("#selectDepotTextFormat", "depotTextFormat");
       bindSettingSelect("#selectDepotFilledPolicy", "depotFilledPolicy");
-      bindSettingSelect("#selectDistanceDisplayMode", "distanceDisplayMode", v => v, true);
+      const selectDistanceDisplayMode = this.container.querySelector("#selectDistanceDisplayMode");
+      if (selectDistanceDisplayMode) {
+        selectDistanceDisplayMode.addEventListener("change", (e) => {
+          const val = e.target.value;
+          this.safeMutate(() => {
+            this.model.updateSettings({ distanceDisplayMode: val });
+          });
+          const decPlacesEl = this.container.querySelector("#selectDistanceDecimalPlaces");
+          if (decPlacesEl) {
+            decPlacesEl.disabled = (val === "none");
+          }
+        });
+      }
       bindSettingSelect("#selectDistanceDecimalPlaces", "distanceDecimalPlaces", v => parseInt(v, 10) === 0 ? 0 : 1);
 
       const bindSettingTextInput = (selector, key) => {

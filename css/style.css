@@ -1040,7 +1040,9 @@ html, body {
    ========================================================================== */
 .form-settings-container {
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
+  min-width: 0;
   padding-right: 4px;
 }
 
@@ -1050,6 +1052,7 @@ html, body {
   border-radius: 4px;
   padding: 12px;
   margin-bottom: 12px;
+  min-width: 0;
 }
 
 .group-title {
@@ -1066,18 +1069,31 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .form-row-grid {
   display: flex;
   gap: 12px;
+  min-width: 0;
 }
 
 .form-col {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.form-col > .form-control,
+.form-col > .form-select,
+.form-row > .form-control,
+.form-row > .form-select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .form-label {
