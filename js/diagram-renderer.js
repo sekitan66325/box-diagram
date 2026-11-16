@@ -914,19 +914,6 @@ class BoxDiagramRenderer {
       `);
     }
 
-    // Web公開版向けの控えめなフッタークレジット常時表示（例外なく各ページ下部端に出力、右下ページ番号時のみ左下へ退避）
-    const footerCreditText = "sekitan66325.github.io/box-diagram で作成";
-    const activePnPos = pageNumShown ? pnPos : "none";
-    const useBottomLeft = activePnPos === "bottom-right";
-    const creditX = useBottomLeft ? titleLeftX : copyRightX;
-    const creditAnchor = useBottomLeft ? "start" : "end";
-    const baseCreditSize = geom.isCompact ? 8.4 : 9.4;
-    const availCreditW = Math.max(70, (copyRightX - titleLeftX) * (activePnPos === "bottom-center" ? 0.40 : 0.65));
-    const creditSize = this._fitSingleLineFontSize(footerCreditText, baseCreditSize, availCreditW, 6.8);
-    elements.push(`
-      <text class="font-f1 diagram-footer-credit" x="${creditX}" y="${footerY}" font-size="${creditSize}" fill="#94a3b8" text-anchor="${creditAnchor}">${this.escapeXml(footerCreditText)}</text>
-    `);
-
     const rawFonts = (data && data.settings && data.settings.fonts) || {};
     const stHeader = this.getRoleFontStyle(data, "header");
     const stStation = this.getRoleFontStyle(data, "station");
@@ -935,6 +922,39 @@ class BoxDiagramRenderer {
     const stTime = this.getRoleFontStyle(data, "time");
 
     const fontHeaderCss = resolveFontCss(rawFonts.header, "F1", stHeader.customFamily);
+
+    // ページ最下端クレジット（末尾要素＋インライン!important固定により改変・隠蔽を抑止）
+    const footerCreditText = this._buildFooterAttributionText();
+    const activePnPos = pageNumShown ? pnPos : "none";
+    const useBottomLeft = activePnPos === "bottom-right";
+    const creditX = useBottomLeft ? titleLeftX : copyRightX;
+    const creditAnchor = useBottomLeft ? "start" : "end";
+    const baseCreditSize = geom.isCompact ? 8.4 : 9.4;
+    const availCreditW = Math.max(70, (copyRightX - titleLeftX) * (activePnPos === "bottom-center" ? 0.40 : 0.65));
+    const creditSize = this._fitSingleLineFontSize(footerCreditText, baseCreditSize, availCreditW, 6.8);
+    const safeCreditFontCss = this.escapeXml(String(fontHeaderCss || "sans-serif").replace(/"/g, "'"));
+    const lockedCreditStyle = [
+      `font-family:${safeCreditFontCss} !important`,
+      "font-weight:400 !important",
+      "font-style:normal !important",
+      "text-decoration:none !important",
+      "letter-spacing:0 !important",
+      `font-size:${creditSize}px !important`,
+      "fill:#94a3b8 !important",
+      "fill-opacity:1 !important",
+      "stroke:none !important",
+      "display:inline !important",
+      "visibility:visible !important",
+      "opacity:1 !important",
+      "pointer-events:none !important",
+      "transform:none !important",
+      "clip-path:none !important",
+      "mask:none !important",
+      "filter:none !important"
+    ].join(";");
+    elements.push(`
+      <text x="${creditX}" y="${footerY}" font-size="${creditSize}" fill="#94a3b8" text-anchor="${creditAnchor}" style="${lockedCreditStyle}">${this.escapeXml(footerCreditText)}</text>
+    `);
     const fontStationCss = resolveFontCss(rawFonts.station, "F1", stStation.customFamily);
     const fontSubStationCss = (rawFonts.station && rawFonts.station !== "F1")
       ? fontStationCss
@@ -973,7 +993,6 @@ class BoxDiagramRenderer {
             .train-line-group:hover line { stroke-width: 2.3px; }
             .diagram-note:hover text { text-decoration: underline; }
             .diagram-empty-hint { pointer-events: none; }
-            .diagram-footer-credit { font-family: ${fontHeaderCss}; font-weight: 400; font-style: normal; text-decoration: none; letter-spacing: 0; }
             @media print { .diagram-empty-hint { display: none; } .train-line-group line { transition: none; } }
           </style>
         </defs>
@@ -2297,6 +2316,12 @@ class BoxDiagramRenderer {
     return DEFAULT_TRAIN_TYPES[0];
   }
 
+  _buildFooterAttributionText() {
+    const h = [115, 101, 107, 105, 116, 97, 110, 54, 54, 51, 50, 53]
+      .map(c => String.fromCharCode(c)).join("");
+    return `${h}.github.io/box-diagram で作成`;
+  }
+
   escapeXml(str) {
     if (str === null || str === undefined) return "";
     return String(str)
@@ -2329,5 +2354,27 @@ class BoxDiagramRenderer {
   }
 }
 
-// グローバルインスタンス
-window.BoxDiagramRenderer = BoxDiagramRenderer;
+// グローバルインスタンスと主要メソッド保護（DevTools等による一時的な上書き抑止）
+[
+  "finalizeSvgPage",
+  "renderPages",
+  "renderSinglePage",
+  "renderTimeAxisSinglePage",
+  "_buildFooterAttributionText"
+].forEach((methodName) => {
+  const desc = Object.getOwnPropertyDescriptor(BoxDiagramRenderer.prototype, methodName);
+  if (desc && desc.configurable) {
+    Object.defineProperty(BoxDiagramRenderer.prototype, methodName, {
+      value: desc.value,
+      writable: false,
+      enumerable: desc.enumerable,
+      configurable: false
+    });
+  }
+});
+Object.defineProperty(window, "BoxDiagramRenderer", {
+  value: BoxDiagramRenderer,
+  writable: false,
+  enumerable: true,
+  configurable: false
+});

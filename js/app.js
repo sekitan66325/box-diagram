@@ -20,6 +20,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const editorContainer = document.getElementById("editorPane");
   const tableEditor = new BoxDiagramTableEditor(editorContainer, dataModel);
   const diagramRenderer = new BoxDiagramRenderer({ interactive: true });
+  const rawRenderPagesFn = BoxDiagramRenderer.prototype.renderPages;
+  const expectedAttributionText = typeof diagramRenderer._buildFooterAttributionText === "function"
+    ? diagramRenderer._buildFooterAttributionText()
+    : [115, 101, 107, 105, 116, 97, 110, 54, 54, 51, 50, 53].map(c => String.fromCharCode(c)).join("") + ".github.io/box-diagram で作成";
+
+  function renderVerifiedPages(data) {
+    const pages = rawRenderPagesFn.call(diagramRenderer, data);
+    if (!Array.isArray(pages)) return [];
+    const hasRosters = !!(data && Array.isArray(data.rosters) && data.rosters.length > 0);
+    if (!hasRosters) return pages;
+    return pages.map((page) => {
+      if (!page || !page.svgHtml || page.svgHtml.includes(expectedAttributionText)) {
+        return page;
+      }
+      const cfg = page.pageConfig || BoxDiagramDataModel.getEffectivePageConfig((data && data.settings) || {});
+      const W = cfg.baseW || 1122.56;
+      const H = cfg.baseH || 1587.36;
+      const fx = (W - 57.6).toFixed(2);
+      const fy = (H - 36).toFixed(2);
+      const fallbackStyle = "font-weight:400 !important;font-style:normal !important;fill:#94a3b8 !important;fill-opacity:1 !important;display:inline !important;visibility:visible !important;opacity:1 !important;pointer-events:none !important;transform:none !important;clip-path:none !important;mask:none !important;filter:none !important";
+      const node = `<text x="${fx}" y="${fy}" font-size="9.0" fill="#94a3b8" text-anchor="end" style="${fallbackStyle}">${expectedAttributionText}</text></svg>`;
+      return Object.assign({}, page, {
+        svgHtml: page.svgHtml.replace(/<\/svg>\s*$/i, node)
+      });
+    });
+  }
 
   // DOM要素参照
   const btnNewDiagram = document.getElementById("btnNewDiagram");
@@ -570,7 +596,103 @@ document.addEventListener("DOMContentLoaded", () => {
     dataModel.updateSettings(mapped);
   }
 
-  // 4. プレビュー描画処理
+  // 4. プレビュー描画処理 ＋ 出力前クレジット改変検知・自動復元ガード
+  let expectedRenderedPageCount = 0;
+  let isInternalPreviewRender = false;
+  let isRepairingPreview = false;
+
+  function findAttributionTextNode(svgEl) {
+    if (!svgEl) return null;
+    const texts = svgEl.querySelectorAll("text");
+    for (let i = texts.length - 1; i >= 0; i--) {
+      if ((texts[i].textContent || "").replace(/\s+/g, " ").trim() === expectedAttributionText) {
+        return texts[i];
+      }
+    }
+    return null;
+  }
+
+  function isSvgAttributionIntact(svgEl) {
+    if (!svgEl || svgEl.hasAttribute("hidden")) return false;
+    const csSvg = getComputedStyle(svgEl);
+    if (csSvg.display === "none" || csSvg.visibility !== "visible" || parseFloat(csSvg.opacity) < 0.99 || csSvg.transform !== "none") {
+      return false;
+    }
+    const cr = findAttributionTextNode(svgEl);
+    if (!cr || cr !== svgEl.lastElementChild || cr.hasAttribute("hidden")) return false;
+    if ((cr.getAttribute("transform") || "").trim() !== "") return false;
+    const yAttr = parseFloat(cr.getAttribute("y"));
+    const fsAttr = parseFloat(cr.getAttribute("font-size"));
+    if (!Number.isFinite(yAttr) || yAttr <= 50 || !Number.isFinite(fsAttr) || fsAttr < 6) return false;
+
+    const cs = getComputedStyle(cr);
+    if (
+      cs.display === "none" ||
+      cs.visibility !== "visible" ||
+      parseFloat(cs.opacity) < 0.95 ||
+      parseFloat(cs.fillOpacity) < 0.95 ||
+      cs.transform !== "none" ||
+      (cs.clipPath && cs.clipPath !== "none") ||
+      (cs.mask && cs.mask !== "none") ||
+      (cs.filter && cs.filter !== "none") ||
+      cs.fill !== "rgb(148, 163, 184)" ||
+      parseFloat(cs.fontSize) < 5
+    ) {
+      return false;
+    }
+
+    if (previewViewport && previewViewport.offsetParent !== null) {
+      const crRect = cr.getBoundingClientRect();
+      const svgRect = svgEl.getBoundingClientRect();
+      if (crRect.width <= 5 || crRect.height <= 1) return false;
+      if (
+        crRect.left < svgRect.left - 2 ||
+        crRect.right > svgRect.right + 2 ||
+        crRect.top < svgRect.top - 2 ||
+        crRect.bottom > svgRect.bottom + 2
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function isPreviewCreditIntact() {
+    const curData = dataModel.getData();
+    if (!curData || !Array.isArray(curData.rosters) || curData.rosters.length === 0) return true;
+    if (!previewViewport || expectedRenderedPageCount <= 0) return true;
+
+    const wrappers = previewViewport.querySelectorAll(".preview-page-wrapper");
+    if (wrappers.length !== expectedRenderedPageCount) return false;
+    for (const w of wrappers) {
+      if (w.hasAttribute("hidden")) return false;
+      const csW = getComputedStyle(w);
+      if (csW.display === "none" || csW.visibility !== "visible" || parseFloat(csW.opacity) < 0.99) return false;
+      const sheet = w.querySelector(".preview-page-sheet");
+      if (!sheet || sheet.hasAttribute("hidden")) return false;
+      const csS = getComputedStyle(sheet);
+      if (csS.display === "none" || csS.visibility !== "visible" || parseFloat(csS.opacity) < 0.99) return false;
+    }
+
+    const svgs = previewViewport.querySelectorAll("svg.box-diagram-svg");
+    if (svgs.length !== expectedRenderedPageCount) return false;
+    return Array.from(svgs).every(isSvgAttributionIntact);
+  }
+
+  function ensurePreviewIntegrity() {
+    if (isInternalPreviewRender || isRepairingPreview) return;
+    if (isPreviewCreditIntact()) return;
+    isRepairingPreview = true;
+    try {
+      renderPreview();
+    } finally {
+      isRepairingPreview = false;
+    }
+  }
+
+  let previewIntegrityObserver = null;
+  let headStyleObserver = null;
+
   function renderPreview(options = {}) {
     const data = dataModel.getData();
     if (!data) return;
@@ -578,7 +700,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const prevScrollLeft = previewViewport.scrollLeft;
     const prevScrollTop = previewViewport.scrollTop;
 
-    const renderedPages = diagramRenderer.renderPages(data);
+    const renderedPages = renderVerifiedPages(data);
     totalPageCount = renderedPages.length;
     const diag = diagramRenderer.getLastDiagnostics();
     const effectiveCfg = (renderedPages[0] && renderedPages[0].pageConfig)
@@ -603,62 +725,86 @@ document.addEventListener("DOMContentLoaded", () => {
     btnNextPage.disabled = currentPageIndex >= totalPageCount;
 
     const showAll = checkShowAllPages.checked;
-    previewViewport.innerHTML = "";
-
-    // ページごとの実効用紙寸法計算 (AUTO / CUSTOM / A3..B6)
-    const availW = Math.max(200, previewViewport.clientWidth - 48);
-    const availH = Math.max(200, previewViewport.clientHeight - 48);
-
-    // 描画対象ページを決定
     const pagesToDraw = showAll ? renderedPages : renderedPages.filter(p => p.pageIndex === currentPageIndex);
+    expectedRenderedPageCount = pagesToDraw.length;
 
-    pagesToDraw.forEach(page => {
-      const pageCfg = page.pageConfig || effectiveCfg;
-      const baseW = pageCfg.baseW;
-      const baseH = pageCfg.baseH;
+    isInternalPreviewRender = true;
+    if (previewIntegrityObserver) previewIntegrityObserver.disconnect();
+    try {
+      previewViewport.innerHTML = "";
 
-      let pageScale;
-      if (zoomMode === "fit-width") {
-        pageScale = availW / baseW;
-      } else if (zoomMode === "fit") {
-        const scaleW = availW / baseW;
-        const scaleH = availH / baseH;
-        pageScale = Math.min(scaleW, scaleH);
+      // ページごとの実効用紙寸法計算 (AUTO / CUSTOM / A3..B6)
+      const availW = Math.max(200, previewViewport.clientWidth - 48);
+      const availH = Math.max(200, previewViewport.clientHeight - 48);
+
+      pagesToDraw.forEach(page => {
+        const pageCfg = page.pageConfig || effectiveCfg;
+        const baseW = pageCfg.baseW;
+        const baseH = pageCfg.baseH;
+
+        let pageScale;
+        if (zoomMode === "fit-width") {
+          pageScale = availW / baseW;
+        } else if (zoomMode === "fit") {
+          const scaleW = availW / baseW;
+          const scaleH = availH / baseH;
+          pageScale = Math.min(scaleW, scaleH);
+        } else {
+          pageScale = currentZoom;
+        }
+        pageScale = Math.max(0.15, Math.min(2.5, pageScale));
+        appliedScale = pageScale;
+
+        const wrapperEl = document.createElement("div");
+        wrapperEl.className = "preview-page-wrapper";
+        wrapperEl.style.width = `${Math.round(baseW * pageScale)}px`;
+        wrapperEl.style.height = `${Math.round(baseH * pageScale)}px`;
+
+        const sheetEl = document.createElement("div");
+        sheetEl.className = "preview-page-sheet";
+        sheetEl.dataset.pageIndex = page.pageIndex;
+        sheetEl.style.width = `${baseW}px`;
+        sheetEl.style.height = `${baseH}px`;
+        sheetEl.style.transform = `scale(${pageScale})`;
+        sheetEl.style.transformOrigin = "top left";
+
+        sheetEl.innerHTML = page.svgHtml;
+        wrapperEl.appendChild(sheetEl);
+        previewViewport.appendChild(wrapperEl);
+
+        // SVG内の対話イベントを設定
+        bindSvgInteractions(sheetEl.querySelector("svg"), page.pageIndex, page.pageConfig);
+      });
+
+      // 再描画時の意図しないスクロールリセット（Page 1先頭への飛び）を防止
+      if (options && options.resetScroll) {
+        previewViewport.scrollLeft = 0;
+        previewViewport.scrollTop = 0;
       } else {
-        pageScale = currentZoom;
+        previewViewport.scrollLeft = prevScrollLeft;
+        previewViewport.scrollTop = prevScrollTop;
       }
-      pageScale = Math.max(0.15, Math.min(2.5, pageScale));
-      appliedScale = pageScale;
-
-      const wrapperEl = document.createElement("div");
-      wrapperEl.className = "preview-page-wrapper";
-      wrapperEl.style.width = `${Math.round(baseW * pageScale)}px`;
-      wrapperEl.style.height = `${Math.round(baseH * pageScale)}px`;
-
-      const sheetEl = document.createElement("div");
-      sheetEl.className = "preview-page-sheet";
-      sheetEl.dataset.pageIndex = page.pageIndex;
-      sheetEl.style.width = `${baseW}px`;
-      sheetEl.style.height = `${baseH}px`;
-      sheetEl.style.transform = `scale(${pageScale})`;
-      sheetEl.style.transformOrigin = "top left";
-
-      sheetEl.innerHTML = page.svgHtml;
-      wrapperEl.appendChild(sheetEl);
-      previewViewport.appendChild(wrapperEl);
-
-      // SVG内の対話イベントを設定
-      bindSvgInteractions(sheetEl.querySelector("svg"), page.pageIndex, page.pageConfig);
-    });
-
-    // 再描画時の意図しないスクロールリセット（Page 1先頭への飛び）を防止
-    if (options && options.resetScroll) {
-      previewViewport.scrollLeft = 0;
-      previewViewport.scrollTop = 0;
-    } else {
-      previewViewport.scrollLeft = prevScrollLeft;
-      previewViewport.scrollTop = prevScrollTop;
+    } finally {
+      isInternalPreviewRender = false;
+      if (previewIntegrityObserver && previewViewport) {
+        previewIntegrityObserver.observe(previewViewport, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          characterData: true
+        });
+      }
     }
+  }
+
+  if (typeof MutationObserver === "function" && previewViewport) {
+    previewIntegrityObserver = new MutationObserver(() => {
+      ensurePreviewIntegrity();
+    });
+    headStyleObserver = new MutationObserver(() => {
+      ensurePreviewIntegrity();
+    });
+    headStyleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
   }
 
   // 5. SVG上のインタラクション（列車クリック連動・注記ドラッグ＆Alt吸着）
@@ -1576,7 +1722,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function downloadPrintableHtml() {
     const data = dataModel.getData();
     if (!data) return;
-    const pages = diagramRenderer.renderPages(data);
+    const pages = renderVerifiedPages(data);
     const diag = diagramRenderer.getLastDiagnostics();
     const effectiveCfg = (pages[0] && pages[0].pageConfig)
       || (diag && diag.effectivePageConfig)
@@ -1666,6 +1812,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function syncBeforePrintState() {
+    const wasAlreadyPrinting = document.body.dataset.printing === "true";
     printCleanupArmedAt = Date.now();
     document.body.dataset.printing = "true";
     if (checkShowAllPages && !checkShowAllPages.checked) {
@@ -1673,6 +1820,9 @@ document.addEventListener("DOMContentLoaded", () => {
         wasAllPagesBeforePrint = false;
       }
       checkShowAllPages.checked = true;
+      renderPreview();
+    } else if (!wasAlreadyPrinting || !isPreviewCreditIntact()) {
+      // 印刷開始時に画面DOM上の編集・非表示改変をリセットして最新ベクター図面を復元
       renderPreview();
     } else {
       updatePrintPageStyle(dataModel.getData(), lastEffectivePrintCfg);
@@ -1689,8 +1839,15 @@ document.addEventListener("DOMContentLoaded", () => {
       renderPreview();
     } else {
       wasAllPagesBeforePrint = null;
+      ensurePreviewIntegrity();
     }
   }
+
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && String(e.key || "").toLowerCase() === "p") {
+      syncBeforePrintState();
+    }
+  }, true);
 
   window.addEventListener("beforeprint", syncBeforePrintState);
   window.addEventListener("afterprint", restoreAfterPrintState);
@@ -1836,7 +1993,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!data) return;
     closeExportMenu();
     setMobileHeaderMenuOpen(false);
-    const allPages = diagramRenderer.renderPages(data);
+    const allPages = renderVerifiedPages(data);
     if (!allPages || allPages.length === 0) return;
 
     const targetPages = scope === "all"
@@ -1943,7 +2100,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!data) return;
     closeExportMenu();
     setMobileHeaderMenuOpen(false);
-    const pages = diagramRenderer.renderPages(data);
+    const pages = renderVerifiedPages(data);
     if (!pages || pages.length === 0) return;
 
     const rawName = (data.metadata && data.metadata.title) ? data.metadata.title : "box-diagram";
