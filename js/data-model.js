@@ -78,6 +78,26 @@ class BoxDiagramDataModel {
         id: "CONSOLAS",
         label: "Consolas / 等幅数字",
         css: '"Consolas", "SFMono-Regular", "MS Gothic", monospace'
+      },
+      NOTO_SANS: {
+        id: "NOTO_SANS",
+        label: "Noto Sans JP",
+        css: '"Noto Sans JP", "Hiragino Sans", "BIZ UDPGothic", sans-serif'
+      },
+      NOTO_SERIF: {
+        id: "NOTO_SERIF",
+        label: "Noto Serif JP",
+        css: '"Noto Serif JP", "Hiragino Mincho ProN", "BIZ UDPMincho", serif'
+      },
+      UD_KYOKASHO: {
+        id: "UD_KYOKASHO",
+        label: "UDデジタル教科書体",
+        css: '"UD Digi Kyokasho N-R", "UD デジタル 教科書体 N-R", "Yu Mincho", serif'
+      },
+      CUSTOM: {
+        id: "CUSTOM",
+        label: "カスタム（任意フォント名）",
+        css: '"Yu Gothic", "Meiryo", sans-serif'
       }
     };
   }
@@ -90,6 +110,73 @@ class BoxDiagramDataModel {
       trainNo: "F1",
       time: "F2"
     };
+  }
+
+  static get DEFAULT_FONT_STYLE_ITEM() {
+    return {
+      bold: false,
+      italic: false,
+      underline: false,
+      sizeScale: 1.0,
+      letterSpacing: 0,
+      tabularNums: false,
+      customFamily: ""
+    };
+  }
+
+  static getDefaultFontStyles() {
+    const base = BoxDiagramDataModel.DEFAULT_FONT_STYLE_ITEM;
+    return {
+      header: Object.assign({}, base),
+      station: Object.assign({}, base),
+      roster: Object.assign({}, base),
+      trainNo: Object.assign({}, base),
+      time: Object.assign({}, base)
+    };
+  }
+
+  static sanitizeCustomFontFamily(raw) {
+    if (typeof raw !== "string") return "";
+    const cleaned = raw.replace(/[<>{};:\r\n\\"'`]/g, "").trim().slice(0, 80);
+    if (!cleaned) return "";
+    const parts = cleaned.split(",").map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return "";
+    return parts.map(p => `"${p}"`).join(", ");
+  }
+
+  static normalizeFontStyleItem(rawItem) {
+    const def = BoxDiagramDataModel.DEFAULT_FONT_STYLE_ITEM;
+    const src = (rawItem && typeof rawItem === "object") ? rawItem : {};
+    const sizeNum = typeof src.sizeScale === "number" ? src.sizeScale : parseFloat(src.sizeScale);
+    const sizeScale = Number.isFinite(sizeNum)
+      ? Math.round(Math.max(0.65, Math.min(1.6, sizeNum)) * 100) / 100
+      : def.sizeScale;
+    const lsNum = typeof src.letterSpacing === "number" ? src.letterSpacing : parseFloat(src.letterSpacing);
+    const letterSpacing = Number.isFinite(lsNum)
+      ? Math.round(Math.max(-1.0, Math.min(3.0, lsNum)) * 100) / 100
+      : def.letterSpacing;
+    const customFamily = typeof src.customFamily === "string"
+      ? src.customFamily.replace(/[<>{};:\r\n\\"'`]/g, "").trim().slice(0, 80)
+      : "";
+    return {
+      bold: !!src.bold,
+      italic: !!src.italic,
+      underline: !!src.underline,
+      sizeScale,
+      letterSpacing,
+      tabularNums: !!src.tabularNums,
+      customFamily
+    };
+  }
+
+  static normalizeFontStyles(rawStyles) {
+    const roles = ["header", "station", "roster", "trainNo", "time"];
+    const src = (rawStyles && typeof rawStyles === "object") ? rawStyles : {};
+    const out = {};
+    for (const r of roles) {
+      out[r] = BoxDiagramDataModel.normalizeFontStyleItem(src[r]);
+    }
+    return out;
   }
 
   static get PAGE_NUMBER_FORMATS() {
@@ -146,6 +233,7 @@ class BoxDiagramDataModel {
       rosterZebraFill: false,
       autoSyncCoupled: true,
       fonts: Object.assign({}, BoxDiagramDataModel.DEFAULT_ELEMENT_FONTS),
+      fontStyles: BoxDiagramDataModel.getDefaultFontStyles(),
       xAxisMode: "station",
       separatePageSettingsByAxisMode: true,
       timeAxisPageSize: "AUTO",
@@ -161,7 +249,25 @@ class BoxDiagramDataModel {
       timeAxisGridStyle: "default",
       timeAxisLateNightFormat: "24plus",
       timeAxisLabelDensity: "auto",
-      showTimeAxisTurnaroundDash: true
+      showTimeAxisTurnaroundDash: true,
+      showDepotOutCol: true,
+      showDepotInCol: true,
+      depotOutColHeaderText: "出区",
+      depotInColHeaderText: "入区",
+      depotDisplayScope: "all",
+      depotTextFormat: "station_time",
+      depotFilledPolicy: "ends_only",
+      depotFallbackToEndpoints: true,
+      depotOutColWidth: 68,
+      depotInColWidth: 68,
+      distanceDisplayMode: "none",
+      distanceColHeaderText: "走行距離",
+      distanceExcludeDeadhead: false,
+      distanceDecimalPlaces: 1,
+      distanceColWidth: 56,
+      tableVerticalScale: 1.0,
+      tableHorizontalScale: 1.0,
+      rosterColWidth: 66.40
     };
   }
 
@@ -204,9 +310,15 @@ class BoxDiagramDataModel {
     return presets[fallback] ? fallback : "F1";
   }
 
-  static resolveFontCss(fontId, fallback = "F1") {
+  static resolveFontCss(fontId, fallback = "F1", customFamily = "") {
     const presets = BoxDiagramDataModel.FONT_PRESETS;
     const key = BoxDiagramDataModel.normalizeFontId(fontId, fallback);
+    if (key === "CUSTOM") {
+      const sanitized = BoxDiagramDataModel.sanitizeCustomFontFamily(customFamily);
+      if (sanitized) return `${sanitized}, sans-serif`;
+      const fb = presets[fallback] || presets.F1;
+      return fb.css;
+    }
     return (presets[key] && presets[key].css) || presets.F1.css;
   }
 
@@ -220,6 +332,198 @@ class BoxDiagramDataModel {
     const num = typeof val === "number" ? val : parseFloat(val);
     if (!Number.isFinite(num)) return fallback;
     return Math.round(Math.max(minVal, Math.min(maxVal, num)) * 100) / 100;
+  }
+
+  static clampWidth(val, fallback, minVal = 36, maxVal = 180) {
+    const num = typeof val === "number" ? val : parseFloat(val);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.round(Math.max(minVal, Math.min(maxVal, num)) * 100) / 100;
+  }
+
+  static clampKm(val, fallback = null) {
+    if (val === null || val === undefined || val === "") return fallback;
+    const num = typeof val === "number" ? val : parseFloat(String(val).trim());
+    if (!Number.isFinite(num) || num < 0) return fallback;
+    return Math.round(num * 100) / 100;
+  }
+
+  static isDeadheadTrainType(typeObj, typeId = "") {
+    const tid = String(typeId || "").toLowerCase();
+    if (tid === "deadhead" || tid.includes("deadhead") || tid === "trial") return true;
+    const tName = typeObj && typeof typeObj.name === "string" ? typeObj.name : "";
+    return tName.includes("回送") || tName.includes("試運転");
+  }
+
+  static formatDistanceLabel(distanceKm, decimalPlaces = 1) {
+    if (typeof distanceKm !== "number" || !Number.isFinite(distanceKm)) return "";
+    const dp = decimalPlaces === 0 ? 0 : 1;
+    return `${distanceKm.toFixed(dp)}km`;
+  }
+
+  static extractRosterDepotEntries(roster, data = {}, side = "out") {
+    const trains = (roster && Array.isArray(roster.trains)) ? roster.trains : [];
+    if (trains.length === 0) return { entries: [], isFallback: false };
+    const settings = (data && data.settings) || {};
+    const filledPolicy = ["ends_only", "exclude", "all"].includes(settings.depotFilledPolicy)
+      ? settings.depotFilledPolicy
+      : "ends_only";
+    const scope = settings.depotDisplayScope === "firstLast" ? "firstLast" : "all";
+    const fallbackEnabled = settings.depotFallbackToEndpoints !== false;
+    const stations = (data && Array.isArray(data.stations)) ? data.stations : [];
+    const stationMap = new Map(stations.map(s => [s.id, s]));
+
+    const buildEntry = (tr, idx, symbol) => {
+      const stationId = side === "out" ? (tr.fromStation || "") : (tr.toStation || "");
+      const st = stationMap.get(stationId);
+      const stationName = st ? (st.name || stationId) : stationId;
+      const abbr = st ? (st.abbr || (stationName ? stationName.slice(0, 1) : "")) : (stationName ? stationName.slice(0, 1) : "");
+      const time = side === "out" ? (tr.depTime || "") : (tr.arrTime || "");
+      return { trainIndex: idx, stationId, stationName, abbr, time, symbol };
+    };
+
+    const matches = [];
+    for (let idx = 0; idx < trains.length; idx++) {
+      const tr = trains[idx];
+      if (!tr) continue;
+      if (side === "out") {
+        const sym = tr.depSymbol || "none";
+        const isHollow = sym === "circle";
+        const isFilled = sym === "circle_filled";
+        const includeFilled = isFilled && (filledPolicy === "all" || (filledPolicy === "ends_only" && idx === 0));
+        if (isHollow || includeFilled) {
+          matches.push(buildEntry(tr, idx, sym));
+        }
+      } else {
+        const sym = tr.arrSymbol || "none";
+        const isHollow = sym === "triangle";
+        const isFilled = sym === "triangle_filled";
+        const includeFilled = isFilled && (filledPolicy === "all" || (filledPolicy === "ends_only" && idx === trains.length - 1));
+        if (isHollow || includeFilled) {
+          matches.push(buildEntry(tr, idx, sym));
+        }
+      }
+    }
+
+    let isFallback = false;
+    if (matches.length === 0 && fallbackEnabled) {
+      isFallback = true;
+      const fallbackIdx = side === "out" ? 0 : trains.length - 1;
+      matches.push(buildEntry(trains[fallbackIdx], fallbackIdx, "fallback"));
+    }
+
+    if (matches.length <= 1 || scope === "all") {
+      return { entries: matches, isFallback };
+    }
+    const chosen = side === "out" ? [matches[0]] : [matches[matches.length - 1]];
+    return { entries: chosen, isFallback };
+  }
+
+  static formatDepotEntryText(entry, textFormat = "station_time", timeDisplayFormat = "h:mm") {
+    if (!entry) return "";
+    const stName = entry.stationName || "";
+    const abbr = entry.abbr || (stName ? stName.slice(0, 1) : "");
+    const formattedTime = entry.time
+      ? BoxDiagramDataModel.formatTrainTimeText(entry.time, timeDisplayFormat || "h:mm")
+      : "";
+    switch (textFormat) {
+      case "abbr_time":
+        return formattedTime ? `${abbr} ${formattedTime}`.trim() : abbr;
+      case "station_only":
+        return stName;
+      case "abbr_only":
+        return abbr;
+      case "station_time":
+      default:
+        return formattedTime ? `${stName} ${formattedTime}`.trim() : stName;
+    }
+  }
+
+  static resolveRosterDepotDisplay(roster, data = {}, side = "out") {
+    const settings = (data && data.settings) || {};
+    const textFormat = ["station_time", "abbr_time", "station_only", "abbr_only"].includes(settings.depotTextFormat)
+      ? settings.depotTextFormat
+      : "station_time";
+    const timeDisplayFormat = settings.timeDisplayFormat || "h:mm";
+    const extracted = BoxDiagramDataModel.extractRosterDepotEntries(roster, data, side);
+    const autoLines = extracted.entries
+      .map(e => BoxDiagramDataModel.formatDepotEntryText(e, textFormat, timeDisplayFormat))
+      .filter(Boolean);
+    const overrideRaw = roster
+      ? (side === "out" ? roster.depotOutOverride : roster.depotInOverride)
+      : "";
+    const overrideStr = typeof overrideRaw === "string" ? overrideRaw : "";
+    const isOverride = overrideStr.trim().length > 0;
+    const lines = isOverride
+      ? overrideStr.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+      : autoLines;
+    return {
+      lines,
+      autoLines,
+      autoEntries: extracted.entries,
+      isOverride,
+      isFallback: extracted.isFallback
+    };
+  }
+
+  static calculateTrainDistanceKm(train, stationMap) {
+    if (!train) return null;
+    const overrideKm = BoxDiagramDataModel.clampKm(train.distanceKm, null);
+    if (overrideKm !== null) return overrideKm;
+    if (!stationMap) return null;
+    const fromSt = stationMap.get ? stationMap.get(train.fromStation) : stationMap[train.fromStation];
+    const toSt = stationMap.get ? stationMap.get(train.toStation) : stationMap[train.toStation];
+    if (!fromSt || !toSt) return null;
+    if (typeof fromSt.km !== "number" || !Number.isFinite(fromSt.km)) return null;
+    if (typeof toSt.km !== "number" || !Number.isFinite(toSt.km)) return null;
+    return Math.round(Math.abs(toSt.km - fromSt.km) * 100) / 100;
+  }
+
+  static calculateRosterDistanceKm(roster, data = {}) {
+    const trains = (roster && Array.isArray(roster.trains)) ? roster.trains : [];
+    const settings = (data && data.settings) || {};
+    const excludeDeadhead = !!settings.distanceExcludeDeadhead;
+    const stations = (data && Array.isArray(data.stations)) ? data.stations : [];
+    const stationMap = new Map(stations.map(s => [s.id, s]));
+    const trainTypes = (data && Array.isArray(data.trainTypes)) ? data.trainTypes : [];
+    const typeMap = new Map(trainTypes.map(t => [t.id, t]));
+
+    let sumKm = 0;
+    let countedCount = 0;
+    let excludedCount = 0;
+    let missingKmCount = 0;
+
+    for (const tr of trains) {
+      if (!tr) continue;
+      const tObj = typeMap.get(tr.typeId);
+      if (excludeDeadhead && BoxDiagramDataModel.isDeadheadTrainType(tObj, tr.typeId)) {
+        excludedCount++;
+        continue;
+      }
+      const d = BoxDiagramDataModel.calculateTrainDistanceKm(tr, stationMap);
+      if (d !== null) {
+        sumKm += d;
+        countedCount++;
+      } else {
+        missingKmCount++;
+      }
+    }
+
+    const autoKm = Math.round(sumKm * 100) / 100;
+    const hasAutoValid = countedCount > 0 || (excludedCount > 0 && missingKmCount === 0);
+    const manualKm = roster ? BoxDiagramDataModel.clampKm(roster.manualDistanceKm, null) : null;
+    const isManual = manualKm !== null;
+    const hasValidKm = isManual || hasAutoValid;
+    const km = isManual ? manualKm : (hasAutoValid ? autoKm : null);
+
+    return {
+      km,
+      autoKm: hasAutoValid ? autoKm : null,
+      isManual,
+      countedCount,
+      excludedCount,
+      missingKmCount,
+      hasValidKm
+    };
   }
 
   /**
@@ -376,7 +680,8 @@ class BoxDiagramDataModel {
         name,
         abbr,
         visible: true,
-        x: Math.round((leftX + idx * step) * 100) / 100
+        x: Math.round((leftX + idx * step) * 100) / 100,
+        km: null
       };
     });
 
@@ -416,7 +721,8 @@ class BoxDiagramDataModel {
           arrSymbol: "none",
           depTimePos: "auto",
           arrTimePos: "auto",
-          stepRows: 2
+          stepRows: 2,
+          distanceKm: null
         });
       }
       rosters.push({
@@ -424,6 +730,10 @@ class BoxDiagramDataModel {
         name: rName,
         customName: false,
         pageBreakAfter: false,
+        rowScale: 1.0,
+        depotOutOverride: "",
+        depotInOverride: "",
+        manualDistanceKm: null,
         trains
       });
     }
@@ -493,6 +803,7 @@ class BoxDiagramDataModel {
       trainNo: BoxDiagramDataModel.normalizeFontId(rawFonts.trainNo, defaultFonts.trainNo),
       time: BoxDiagramDataModel.normalizeFontId(rawFonts.time, defaultFonts.time)
     };
+    const normFontStyles = BoxDiagramDataModel.normalizeFontStyles(rawSet.fontStyles);
     const validPageFormats = new Set(BoxDiagramDataModel.PAGE_NUMBER_FORMATS.map(f => f.value));
     const validPagePositions = new Set(BoxDiagramDataModel.PAGE_NUMBER_POSITIONS.map(p => p.value));
     const normPageNumFmt = validPageFormats.has(rawSet.pageNumberFormat) ? rawSet.pageNumberFormat : "slash";
@@ -503,6 +814,23 @@ class BoxDiagramDataModel {
     const normTimeGridStyle = ["default", "subtle", "none"].includes(rawSet.timeAxisGridStyle) ? rawSet.timeAxisGridStyle : "default";
     const normLineWidthScale = BoxDiagramDataModel.clampScale(rawSet.lineWidthScale, 1.0, 0.5, 2.5);
     const normSymbolScale = BoxDiagramDataModel.clampScale(rawSet.symbolScale, 1.0, 0.5, 2.0);
+    const normDepotScope = rawSet.depotDisplayScope === "firstLast" ? "firstLast" : "all";
+    const normDepotTextFmt = ["station_time", "abbr_time", "station_only", "abbr_only"].includes(rawSet.depotTextFormat)
+      ? rawSet.depotTextFormat
+      : "station_time";
+    const normDepotFilledPolicy = ["ends_only", "exclude", "all"].includes(rawSet.depotFilledPolicy)
+      ? rawSet.depotFilledPolicy
+      : (rawSet.depotIncludeFilledSymbols === true ? "all" : "ends_only");
+    const normDepotOutW = BoxDiagramDataModel.clampWidth(rawSet.depotOutColWidth, 68, 40, 160);
+    const normDepotInW = BoxDiagramDataModel.clampWidth(rawSet.depotInColWidth, 68, 40, 160);
+    const normDistMode = ["none", "rightCol", "underInDepot", "underRoster"].includes(rawSet.distanceDisplayMode)
+      ? rawSet.distanceDisplayMode
+      : "none";
+    const normDistDec = rawSet.distanceDecimalPlaces === 0 ? 0 : 1;
+    const normDistColW = BoxDiagramDataModel.clampWidth(rawSet.distanceColWidth, 56, 38, 120);
+    const normTableVScale = BoxDiagramDataModel.clampScale(rawSet.tableVerticalScale, 1.0, 0.5, 1.8);
+    const normTableHScale = BoxDiagramDataModel.clampScale(rawSet.tableHorizontalScale, 1.0, 0.6, 1.8);
+    const normRosterColW = BoxDiagramDataModel.clampWidth(rawSet.rosterColWidth, 66.40, 42, 140);
 
     const d = {
       version: raw.version || "2.0",
@@ -529,6 +857,7 @@ class BoxDiagramDataModel {
         symbolScale: normSymbolScale,
         rosterZebraFill: !!rawSet.rosterZebraFill,
         fonts: normFonts,
+        fontStyles: normFontStyles,
         xAxisMode: rawSet.xAxisMode === "time" ? "time" : "station",
         separatePageSettingsByAxisMode: normSeparatePage,
         timeAxisPageSize: normTimePageSize,
@@ -545,6 +874,24 @@ class BoxDiagramDataModel {
         timeAxisLateNightFormat: normLateFmt,
         timeAxisLabelDensity: rawSet.timeAxisLabelDensity === "full" ? "full" : "auto",
         showTimeAxisTurnaroundDash: typeof rawSet.showTimeAxisTurnaroundDash === "boolean" ? rawSet.showTimeAxisTurnaroundDash : true,
+        showDepotOutCol: typeof rawSet.showDepotOutCol === "boolean" ? rawSet.showDepotOutCol : true,
+        showDepotInCol: typeof rawSet.showDepotInCol === "boolean" ? rawSet.showDepotInCol : true,
+        depotOutColHeaderText: typeof rawSet.depotOutColHeaderText === "string" ? rawSet.depotOutColHeaderText : "出区",
+        depotInColHeaderText: typeof rawSet.depotInColHeaderText === "string" ? rawSet.depotInColHeaderText : "入区",
+        depotDisplayScope: normDepotScope,
+        depotTextFormat: normDepotTextFmt,
+        depotFilledPolicy: normDepotFilledPolicy,
+        depotFallbackToEndpoints: typeof rawSet.depotFallbackToEndpoints === "boolean" ? rawSet.depotFallbackToEndpoints : true,
+        depotOutColWidth: normDepotOutW,
+        depotInColWidth: normDepotInW,
+        distanceDisplayMode: normDistMode,
+        distanceColHeaderText: typeof rawSet.distanceColHeaderText === "string" ? rawSet.distanceColHeaderText : "走行距離",
+        distanceExcludeDeadhead: !!rawSet.distanceExcludeDeadhead,
+        distanceDecimalPlaces: normDistDec,
+        distanceColWidth: normDistColW,
+        tableVerticalScale: normTableVScale,
+        tableHorizontalScale: normTableHScale,
+        rosterColWidth: normRosterColW,
         autoSyncCoupled: typeof rawSet.autoSyncCoupled === "boolean" ? rawSet.autoSyncCoupled : true,
         partialConnectStepRows: typeof rawSet.partialConnectStepRows === "number" && !Number.isNaN(rawSet.partialConnectStepRows)
           ? Math.max(0, rawSet.partialConnectStepRows)
@@ -556,7 +903,8 @@ class BoxDiagramDataModel {
             name: s.name || "駅",
             abbr: s.abbr || (s.name ? s.name[0] : "駅"),
             visible: s.visible !== false,
-            x: typeof s.x === "number" ? s.x : 200 + idx * 200
+            x: typeof s.x === "number" ? s.x : 200 + idx * 200,
+            km: BoxDiagramDataModel.clampKm(s.km, null)
           }))
         : JSON.parse(JSON.stringify(FICTIONAL_ALL_STATIONS.filter(s => s.visible !== false))),
       trainTypes: Array.isArray(raw.trainTypes) && raw.trainTypes.length > 0
@@ -583,6 +931,10 @@ class BoxDiagramDataModel {
           name: rosterName,
           customName: hasCustomName,
           pageBreakAfter: !!r.pageBreakAfter,
+          rowScale: BoxDiagramDataModel.clampScale(r.rowScale, 1.0, 0.5, 2.0),
+          depotOutOverride: typeof r.depotOutOverride === "string" ? r.depotOutOverride : "",
+          depotInOverride: typeof r.depotInOverride === "string" ? r.depotInOverride : "",
+          manualDistanceKm: BoxDiagramDataModel.clampKm(r.manualDistanceKm, null),
           trains: Array.isArray(r.trains) ? r.trains.map(tr => {
             const rawStep = typeof tr.stepRows === "number" && !Number.isNaN(tr.stepRows) ? Math.max(0, tr.stepRows) : 2;
             const formation = Array.isArray(tr.coupledFormation) && tr.coupledFormation.length > 0
@@ -604,7 +956,8 @@ class BoxDiagramDataModel {
               arrSymbol: tr.arrSymbol || "none",
               depTimePos: tr.depTimePos || "auto",
               arrTimePos: tr.arrTimePos || "auto",
-              stepRows: rawStep
+              stepRows: rawStep,
+              distanceKm: BoxDiagramDataModel.clampKm(tr.distanceKm, null)
             };
           }) : []
         };
@@ -618,7 +971,13 @@ class BoxDiagramDataModel {
         y: typeof n.y === "number" ? n.y : 300,
         color: n.color || "#FF0000",
         fontSize: typeof n.fontSize === "number" ? n.fontSize : 10.72,
-        font: BoxDiagramDataModel.normalizeFontId(n.font, "F1")
+        font: BoxDiagramDataModel.normalizeFontId(n.font, "F1"),
+        bold: !!n.bold,
+        italic: !!n.italic,
+        underline: !!n.underline,
+        letterSpacing: (typeof n.letterSpacing === "number" && Number.isFinite(n.letterSpacing))
+          ? Math.round(Math.max(-1.0, Math.min(4.0, n.letterSpacing)) * 100) / 100
+          : 0
       })) : []
     };
 
@@ -754,6 +1113,24 @@ class BoxDiagramDataModel {
         } else {
           delete normalizedPatch.fonts;
         }
+      } else if (key === "fontStyles" && normalizedPatch.fontStyles && typeof normalizedPatch.fontStyles === "object") {
+        const curStyles = BoxDiagramDataModel.normalizeFontStyles(this.data.settings.fontStyles);
+        const nextStyles = BoxDiagramDataModel.normalizeFontStyles(curStyles);
+        let styleChanged = false;
+        for (const role of Object.keys(normalizedPatch.fontStyles)) {
+          if (!nextStyles[role]) continue;
+          const merged = BoxDiagramDataModel.normalizeFontStyleItem(Object.assign({}, curStyles[role], normalizedPatch.fontStyles[role] || {}));
+          if (JSON.stringify(curStyles[role]) !== JSON.stringify(merged)) {
+            nextStyles[role] = merged;
+            styleChanged = true;
+          }
+        }
+        if (styleChanged) {
+          normalizedPatch.fontStyles = nextStyles;
+          hasDiff = true;
+        } else {
+          delete normalizedPatch.fontStyles;
+        }
       } else if (this.data.settings[key] !== normalizedPatch[key]) {
         hasDiff = true;
       }
@@ -808,13 +1185,16 @@ class BoxDiagramDataModel {
 
   addStation(station) {
     this.mutate("stations-add", () => {
-      this.data.stations.push(Object.assign({
+      const next = Object.assign({
         id: "st-" + Date.now(),
         name: "新駅",
         abbr: "新",
         visible: true,
-        x: 500
-      }, station));
+        x: 500,
+        km: null
+      }, station);
+      next.km = BoxDiagramDataModel.clampKm(next.km, null);
+      this.data.stations.push(next);
       this.recalculateStationX();
     });
   }
@@ -823,7 +1203,11 @@ class BoxDiagramDataModel {
     this.mutate("stations-update", () => {
       const st = this.data.stations.find(s => s.id === stationId);
       if (st) {
-        Object.assign(st, patch);
+        const sanitized = Object.assign({}, patch);
+        if ("km" in sanitized) {
+          sanitized.km = BoxDiagramDataModel.clampKm(sanitized.km, null);
+        }
+        Object.assign(st, sanitized);
       }
     }, { stationId, patch });
   }
@@ -933,6 +1317,10 @@ class BoxDiagramDataModel {
         name,
         customName,
         pageBreakAfter: false,
+        rowScale: 1.0,
+        depotOutOverride: "",
+        depotInOverride: "",
+        manualDistanceKm: null,
         trains: []
       }, roster, { id, name, customName }));
     });
@@ -953,6 +1341,10 @@ class BoxDiagramDataModel {
       cloned.id = newId;
       cloned.name = newId;
       cloned.customName = false;
+      cloned.rowScale = BoxDiagramDataModel.clampScale(cloned.rowScale, 1.0, 0.5, 2.0);
+      cloned.depotOutOverride = typeof cloned.depotOutOverride === "string" ? cloned.depotOutOverride : "";
+      cloned.depotInOverride = typeof cloned.depotInOverride === "string" ? cloned.depotInOverride : "";
+      cloned.manualDistanceKm = BoxDiagramDataModel.clampKm(cloned.manualDistanceKm, null);
       if (Array.isArray(cloned.trains)) {
         cloned.trains.forEach(tr => {
           tr.coupleGroupId = "";
@@ -983,7 +1375,18 @@ class BoxDiagramDataModel {
     const willChangeName = "name" in patch && patch.name !== r.name;
     const willResetName = !!patch.resetName && (r.customName || r.name !== oldId);
     const willChangeBreak = "pageBreakAfter" in patch && !!patch.pageBreakAfter !== !!r.pageBreakAfter;
-    if (!willRenameId && !willChangeName && !willResetName && !willChangeBreak) {
+    const nextRowScale = "rowScale" in patch ? BoxDiagramDataModel.clampScale(patch.rowScale, 1.0, 0.5, 2.0) : undefined;
+    const willChangeRowScale = "rowScale" in patch && nextRowScale !== (typeof r.rowScale === "number" ? r.rowScale : 1.0);
+    const nextOutOv = "depotOutOverride" in patch ? String(patch.depotOutOverride || "") : undefined;
+    const willChangeOutOv = "depotOutOverride" in patch && nextOutOv !== (r.depotOutOverride || "");
+    const nextInOv = "depotInOverride" in patch ? String(patch.depotInOverride || "") : undefined;
+    const willChangeInOv = "depotInOverride" in patch && nextInOv !== (r.depotInOverride || "");
+    const nextManualKm = "manualDistanceKm" in patch ? BoxDiagramDataModel.clampKm(patch.manualDistanceKm, null) : undefined;
+    const curManualKm = BoxDiagramDataModel.clampKm(r.manualDistanceKm, null);
+    const willChangeManualKm = "manualDistanceKm" in patch && nextManualKm !== curManualKm;
+
+    if (!willRenameId && !willChangeName && !willResetName && !willChangeBreak
+        && !willChangeRowScale && !willChangeOutOv && !willChangeInOv && !willChangeManualKm) {
       return { ok: true, noChange: true, oldId, newId: oldId, roster: r };
     }
 
@@ -1023,6 +1426,18 @@ class BoxDiagramDataModel {
       if ("pageBreakAfter" in patch) {
         r.pageBreakAfter = !!patch.pageBreakAfter;
       }
+      if (willChangeRowScale) {
+        r.rowScale = nextRowScale;
+      }
+      if (willChangeOutOv) {
+        r.depotOutOverride = nextOutOv;
+      }
+      if (willChangeInOv) {
+        r.depotInOverride = nextInOv;
+      }
+      if (willChangeManualKm) {
+        r.manualDistanceKm = nextManualKm;
+      }
     }, { rosterId: r.id, oldId, newId: r.id, patch });
 
     return { ok: true, oldId, newId: r.id, roster: r };
@@ -1040,6 +1455,114 @@ class BoxDiagramDataModel {
       const item = this.data.rosters.splice(fromIdx, 1)[0];
       this.data.rosters.splice(toIdx, 0, item);
     });
+  }
+
+  /**
+   * 複数運用を一括して目標位置（挿入インデックス）へ並べ替え
+   */
+  moveRostersBlock(rosterIds, insertIndex) {
+    if (!Array.isArray(rosterIds) || rosterIds.length === 0) return false;
+    const rosters = this.data.rosters || [];
+    const idSet = new Set(rosterIds);
+    const movingIndices = [];
+    for (let i = 0; i < rosters.length; i++) {
+      if (idSet.has(rosters[i].id)) movingIndices.push(i);
+    }
+    if (movingIndices.length === 0) return false;
+
+    const clampedTarget = Math.max(0, Math.min(rosters.length, insertIndex));
+    const removedBefore = movingIndices.filter(idx => idx < clampedTarget).length;
+    const adjustedInsert = clampedTarget - removedBefore;
+
+    this.mutate("rosters-move", () => {
+      const moved = [];
+      for (let i = movingIndices.length - 1; i >= 0; i--) {
+        moved.unshift(rosters.splice(movingIndices[i], 1)[0]);
+      }
+      rosters.splice(adjustedInsert, 0, ...moved);
+    }, { rosterIds: Array.from(idSet), insertIndex: adjustedInsert });
+    return true;
+  }
+
+  /**
+   * コピー/カット元運用リストから一意ID付きで運用を挿入（cutSourceIds指定時は原子的に元運用を削除して移動）
+   */
+  insertRosters(rostersToInsert, insertAt = null, options = {}) {
+    if (!Array.isArray(rostersToInsert) || rostersToInsert.length === 0) return [];
+    const rosters = this.data.rosters || (this.data.rosters = []);
+    const isCutMove = Array.isArray(options.cutSourceIds) && options.cutSourceIds.length > 0;
+    const cutSourceSet = new Set(options.cutSourceIds || []);
+    const createdIds = [];
+
+    this.mutate(isCutMove ? "rosters-transfer" : "rosters-add", () => {
+      if (isCutMove) {
+        for (let i = rosters.length - 1; i >= 0; i--) {
+          if (cutSourceSet.has(rosters[i].id)) {
+            rosters.splice(i, 1);
+          }
+        }
+      }
+
+      const usedIds = new Set(rosters.map(r => r.id));
+      const clonedList = rostersToInsert.map(raw => {
+        const cloned = JSON.parse(JSON.stringify(raw));
+        let candidateId = String(cloned.id || "A1").trim() || "A1";
+        if (usedIds.has(candidateId)) {
+          let base = `${candidateId}_copy`;
+          let candidate = base;
+          let suffix = 2;
+          while (usedIds.has(candidate)) {
+            candidate = `${base}${suffix++}`;
+          }
+          candidateId = candidate;
+          if (!cloned.customName) {
+            cloned.name = candidateId;
+          }
+        }
+        usedIds.add(candidateId);
+        cloned.id = candidateId;
+        if (!cloned.customName) {
+          cloned.name = candidateId;
+        }
+        if (Array.isArray(cloned.trains)) {
+          cloned.trains = cloned.trains.map(tr =>
+            isCutMove ? Object.assign({}, tr) : this._sanitizeClonedTrain(tr, candidateId, { clearCouplingGroup: true })
+          );
+        } else {
+          cloned.trains = [];
+        }
+        createdIds.push(candidateId);
+        return cloned;
+      });
+
+      const pos = (typeof insertAt === "number" && Number.isFinite(insertAt))
+        ? Math.max(0, Math.min(rosters.length, insertAt))
+        : rosters.length;
+      rosters.splice(pos, 0, ...clonedList);
+    }, { createdIds, isCutMove });
+
+    return createdIds;
+  }
+
+  /**
+   * 複数運用を一括削除し、削除前スナップショットを返す
+   */
+  removeRostersByIds(rosterIds) {
+    if (!Array.isArray(rosterIds) || rosterIds.length === 0) return [];
+    const targetSet = new Set(rosterIds);
+    const removed = [];
+    this.mutate("rosters-del", () => {
+      const kept = [];
+      for (const r of (this.data.rosters || [])) {
+        if (targetSet.has(r.id)) {
+          removed.push(JSON.parse(JSON.stringify(r)));
+        } else {
+          kept.push(r);
+        }
+      }
+      this.data.rosters = kept;
+    }, { rosterIds });
+    return removed;
   }
 
   // ==================== 列車表 (Trains for Roster) ====================
@@ -1214,8 +1737,11 @@ class BoxDiagramDataModel {
       arrSymbol: "none",
       depTimePos: "auto",
       arrTimePos: "auto",
-      stepRows: typeof train.stepRows === "number" ? Math.max(0, train.stepRows) : 2
-    }, train);
+      stepRows: typeof train.stepRows === "number" ? Math.max(0, train.stepRows) : 2,
+      distanceKm: BoxDiagramDataModel.clampKm(train.distanceKm, null)
+    }, train, {
+      distanceKm: BoxDiagramDataModel.clampKm(train.distanceKm, null)
+    });
 
     this.mutate("trains-add", () => {
       if (typeof insertAt === "number" && insertAt >= 0 && insertAt <= r.trains.length) {
@@ -1331,6 +1857,9 @@ class BoxDiagramDataModel {
     if ("stepRows" in sanitizedPatch) {
       const parsed = Number(sanitizedPatch.stepRows);
       sanitizedPatch.stepRows = Number.isNaN(parsed) ? 2 : Math.max(0, parsed);
+    }
+    if ("distanceKm" in sanitizedPatch) {
+      sanitizedPatch.distanceKm = BoxDiagramDataModel.clampKm(sanitizedPatch.distanceKm, null);
     }
     if (("coupledPartner" in sanitizedPatch || "coupledPosition" in sanitizedPatch || "coupledFormation" in sanitizedPatch)
         && !("customCoupled" in sanitizedPatch) && current.customCoupled) {
@@ -1540,12 +2069,34 @@ class BoxDiagramDataModel {
     return { updatedCount, createdCount };
   }
 
+  /**
+   * 複製・別運用貼付用に列車データを安全にサニタイズしてクローンする
+   */
+  _sanitizeClonedTrain(rawTrain, targetRosterId = null, options = {}) {
+    const cloned = JSON.parse(JSON.stringify(rawTrain || {}));
+    const clearCouplingGroup = options.clearCouplingGroup !== false;
+    if (clearCouplingGroup) {
+      cloned.coupleGroupId = "";
+    }
+    if (targetRosterId) {
+      if (cloned.coupledPartner === targetRosterId) {
+        cloned.coupledPartner = "";
+        cloned.coupledPosition = "after";
+      }
+      if (Array.isArray(cloned.coupledFormation) && cloned.coupledFormation.includes(targetRosterId)) {
+        cloned.coupledFormation = null;
+        cloned.coupledPartner = "";
+        cloned.coupledPosition = "after";
+      }
+    }
+    return cloned;
+  }
+
   duplicateTrain(rosterId, trainIndex) {
     this.mutate("trains-dup", () => {
       const r = this.getRoster(rosterId);
       if (r && r.trains[trainIndex]) {
-        const cloned = JSON.parse(JSON.stringify(r.trains[trainIndex]));
-        cloned.coupleGroupId = "";
+        const cloned = this._sanitizeClonedTrain(r.trains[trainIndex], rosterId, { clearCouplingGroup: true });
         r.trains.splice(trainIndex + 1, 0, cloned);
       }
     }, { rosterId, trainIndex });
@@ -1570,6 +2121,125 @@ class BoxDiagramDataModel {
     }, { rosterId, fromIdx, toIdx });
   }
 
+  /**
+   * 複数の選択列車を同一運用内の指定挿入位置へ一括移動する
+   */
+  moveTrainsBlock(rosterId, indices, insertIndex) {
+    const r = this.getRoster(rosterId);
+    if (!r || !Array.isArray(indices) || indices.length === 0) return [];
+    const uniqueSorted = Array.from(new Set(indices.filter(i => Number.isInteger(i) && i >= 0 && i < r.trains.length)))
+      .sort((a, b) => a - b);
+    if (uniqueSorted.length === 0) return [];
+
+    const clampedTarget = Math.max(0, Math.min(r.trains.length, insertIndex));
+    const removedBefore = uniqueSorted.filter(idx => idx < clampedTarget).length;
+    const adjustedInsert = clampedTarget - removedBefore;
+    let newIndices = [];
+
+    this.mutate("trains-move", () => {
+      const moved = [];
+      for (let i = uniqueSorted.length - 1; i >= 0; i--) {
+        moved.unshift(r.trains.splice(uniqueSorted[i], 1)[0]);
+      }
+      r.trains.splice(adjustedInsert, 0, ...moved);
+      newIndices = moved.map((_, offset) => adjustedInsert + offset);
+    }, { rosterId, indices: uniqueSorted, insertIndex: adjustedInsert });
+
+    return newIndices;
+  }
+
+  /**
+   * 指定したインデックス配列（またはオブジェクト参照配列）の列車を一括削除し、削除データを返す
+   */
+  removeTrains(rosterId, indices = [], refs = []) {
+    const r = this.getRoster(rosterId);
+    if (!r) return [];
+    const targetIdxSet = new Set();
+    if (Array.isArray(refs) && refs.length > 0) {
+      for (const ref of refs) {
+        const foundIdx = r.trains.indexOf(ref);
+        if (foundIdx !== -1) targetIdxSet.add(foundIdx);
+      }
+    }
+    if (targetIdxSet.size === 0 && Array.isArray(indices)) {
+      for (const idx of indices) {
+        if (Number.isInteger(idx) && idx >= 0 && idx < r.trains.length) {
+          targetIdxSet.add(idx);
+        }
+      }
+    }
+    const sorted = Array.from(targetIdxSet).sort((a, b) => a - b);
+    if (sorted.length === 0) return [];
+
+    const removed = sorted.map(i => JSON.parse(JSON.stringify(r.trains[i])));
+    this.mutate("trains-del", () => {
+      for (let i = sorted.length - 1; i >= 0; i--) {
+        r.trains.splice(sorted[i], 1);
+      }
+    }, { rosterId, indices: sorted, count: sorted.length });
+    return removed;
+  }
+
+  /**
+   * コピー/カットされた複数列車を指定運用の任意位置へ挿入（options.cutFrom 指定時は移動元削除を1回のUndo単位で原子的実行）
+   */
+  insertTrains(targetRosterId, trainsArray, insertAt = null, options = {}) {
+    const targetRoster = this.getRoster(targetRosterId);
+    if (!targetRoster || !Array.isArray(trainsArray) || trainsArray.length === 0) {
+      return { ok: false, insertedIndices: [] };
+    }
+
+    const cutFrom = options.cutFrom || null;
+    const isCutMove = !!(cutFrom && cutFrom.rosterId);
+    const preserveCouplingOnSameSource = isCutMove && cutFrom.rosterId === targetRosterId;
+    let insertedIndices = [];
+
+    this.mutate(isCutMove ? "trains-transfer" : "trains-add", () => {
+      let resolvedInsert = (typeof insertAt === "number" && Number.isFinite(insertAt))
+        ? Math.max(0, Math.min(targetRoster.trains.length, insertAt))
+        : targetRoster.trains.length;
+
+      if (isCutMove) {
+        const srcRoster = this.getRoster(cutFrom.rosterId);
+        if (srcRoster) {
+          const removeIdxSet = new Set();
+          if (Array.isArray(cutFrom.refs) && cutFrom.refs.length > 0) {
+            for (const ref of cutFrom.refs) {
+              const found = srcRoster.trains.indexOf(ref);
+              if (found !== -1) removeIdxSet.add(found);
+            }
+          }
+          if (removeIdxSet.size === 0 && Array.isArray(cutFrom.indices)) {
+            for (const idx of cutFrom.indices) {
+              if (Number.isInteger(idx) && idx >= 0 && idx < srcRoster.trains.length) {
+                removeIdxSet.add(idx);
+              }
+            }
+          }
+          const sortedCut = Array.from(removeIdxSet).sort((a, b) => a - b);
+          if (cutFrom.rosterId === targetRosterId) {
+            const removedBefore = sortedCut.filter(i => i < resolvedInsert).length;
+            resolvedInsert = Math.max(0, resolvedInsert - removedBefore);
+          }
+          for (let i = sortedCut.length - 1; i >= 0; i--) {
+            srcRoster.trains.splice(sortedCut[i], 1);
+          }
+        }
+      }
+
+      const prepared = trainsArray.map(tr =>
+        preserveCouplingOnSameSource
+          ? Object.assign({}, JSON.parse(JSON.stringify(tr)))
+          : this._sanitizeClonedTrain(tr, targetRosterId, { clearCouplingGroup: !isCutMove || cutFrom.rosterId !== targetRosterId })
+      );
+
+      targetRoster.trains.splice(resolvedInsert, 0, ...prepared);
+      insertedIndices = prepared.map((_, offset) => resolvedInsert + offset);
+    }, { targetRosterId, isCutMove, count: trainsArray.length });
+
+    return { ok: true, insertedIndices };
+  }
+
   // ==================== 注記マスタ ====================
   getNotes() {
     return this.data ? this.data.notes : [];
@@ -1592,7 +2262,11 @@ class BoxDiagramDataModel {
         y: yVal,
         color: "#FF0000",
         fontSize: 10.72,
-        font: "F1"
+        font: "F1",
+        bold: false,
+        italic: false,
+        underline: false,
+        letterSpacing: 0
       }, note, { page: pageVal, axisMode, x: xVal, y: yVal });
       this.data.notes.push(newNote);
     });

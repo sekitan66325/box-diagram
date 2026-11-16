@@ -1,23 +1,23 @@
 /**
  * 鉄道車両運用表（箱ダイヤ）サンプルプリセットデータ
  *
- * 一般公開（β版）向け 架空路線ショウケースデータ
+ * 一般公開版（v1.2.0）向け 架空路線ショウケースデータ
  * 折り返し・途中駅部分継走（1行/0行）・選択式連結位置・3両編成・自動同期・
  * 多彩な列車種別/線種・発着記号4種・自由注記・用紙/駅ヘッダー設定まで全機能を体感できます。
  */
 
 // 架空路線「桜川電鉄 本線」全10駅マスタ（初期表示は主要4駅: 桜川・美咲町・楓ヶ丘・青山温泉）
 const FICTIONAL_ALL_STATIONS = [
-  { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32 },
-  { id: "shinsakura", name: "新桜川", abbr: "新", visible: false, x: 287.79 },
-  { id: "akanedai", name: "あかね台", abbr: "茜", visible: false, x: 375.25 },
-  { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72 },
-  { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12 },
-  { id: "midorigamori", name: "緑ヶ森", abbr: "緑", visible: false, x: 790.72 },
-  { id: "keikokuguchi", name: "渓谷口", abbr: "渓", visible: false, x: 856.32 },
-  { id: "onsenmae", name: "温泉前", abbr: "温", visible: false, x: 921.92 },
-  { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52 },
-  { id: "tembokoen", name: "展望公園", abbr: "展", visible: false, x: 1050.00 }
+  { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32, km: 0.0 },
+  { id: "shinsakura", name: "新桜川", abbr: "新", visible: false, x: 287.79, km: 2.8 },
+  { id: "akanedai", name: "あかね台", abbr: "茜", visible: false, x: 375.25, km: 6.1 },
+  { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72, km: 9.4 },
+  { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12, km: 18.2 },
+  { id: "midorigamori", name: "緑ヶ森", abbr: "緑", visible: false, x: 790.72, km: 20.5 },
+  { id: "keikokuguchi", name: "渓谷口", abbr: "渓", visible: false, x: 856.32, km: 22.8 },
+  { id: "onsenmae", name: "温泉前", abbr: "温", visible: false, x: 921.92, km: 25.1 },
+  { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52, km: 27.5 },
+  { id: "tembokoen", name: "展望公園", abbr: "展", visible: false, x: 1050.00, km: 29.8 }
 ];
 
 // 標準列車種別マスタ定義
@@ -106,13 +106,15 @@ const PRESET_SAKURAGAWA_MAIN = {
     timeAxisPageSize: "AUTO",
     timeAxisStartHour: 4,
     timeAxisRangeMode: "auto",
-    timeAxisLateNightFormat: "24plus"
+    timeAxisLateNightFormat: "24plus",
+    showDepotOutCol: true,
+    showDepotInCol: true
   },
   stations: [
-    { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32 },
-    { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72 },
-    { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12 },
-    { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52 }
+    { id: "sakuragawa", name: "桜川", abbr: "桜", visible: true, x: 200.32, km: 0.0 },
+    { id: "misakicho", name: "美咲町", abbr: "美", visible: true, x: 462.72, km: 9.4 },
+    { id: "kaedegaoka", name: "楓ヶ丘", abbr: "楓", visible: true, x: 725.12, km: 18.2 },
+    { id: "aoyamaonsen", name: "青山温泉", abbr: "青", visible: true, x: 987.52, km: 27.5 }
   ],
   trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
   rosters: [
@@ -302,10 +304,10 @@ const PRESET_SAKURAGAWA_MAIN = {
       page: 1,
       axisMode: "station",
       text: "※ 土休日は桜川〜楓ヶ丘2両 ／ 104(1行段差)・122(同段0行)",
-      x: 752.0,
-      y: 266.72,
+      x: 240.0,
+      y: 668.0,
       color: "#FF0000",
-      fontSize: 9.5,
+      fontSize: 10.72,
       font: "F1"
     },
     {
@@ -313,7 +315,7 @@ const PRESET_SAKURAGAWA_MAIN = {
       page: 2,
       axisMode: "station",
       text: "※ EL2は観光急行(8001・8002)のみ補機連結 ／ 試901〜903は水曜日のみ運転",
-      x: 202.40,
+      x: 240.00,
       y: 860.00,
       color: "#B91C1C",
       fontSize: 10.72,
@@ -324,7 +326,7 @@ const PRESET_SAKURAGAWA_MAIN = {
       page: 3,
       axisMode: "station",
       text: "※ N1(505△→520○)・N4(531△→533○→598○)は入庫〜出庫のため垂直接続線なし",
-      x: 202.40,
+      x: 240.00,
       y: 938.00,
       color: "#1E293B",
       fontSize: 10.72,
@@ -335,7 +337,7 @@ const PRESET_SAKURAGAWA_MAIN = {
       page: 1,
       axisMode: "time",
       text: "※ 日界=4:00 設定により 5:40〜27:15（0:18〜1:36含む）を1日通しで連続表示。時刻軸は「変形 (自動フィット)」で横長・縦余白なしに自動調整されます。",
-      x: 140.00,
+      x: 230.00,
       y: 1062.00,
       color: "#047857",
       fontSize: 10.72,
@@ -366,12 +368,14 @@ const PRESET_MIDORIKAWA_COMPACT = {
     showLegend: false,
     symbolScale: 1.0,
     symbolFill: "preset",
-    autoSyncCoupled: true
+    autoSyncCoupled: true,
+    showDepotOutCol: true,
+    showDepotInCol: true
   },
   stations: [
-    { id: "midori_kita", name: "北緑川", abbr: "北", visible: true, x: 200.32 },
-    { id: "midori_chuo", name: "緑川公園", abbr: "公", visible: true, x: 593.92 },
-    { id: "midori_minami", name: "南緑川", abbr: "南", visible: true, x: 987.52 }
+    { id: "midori_kita", name: "北緑川", abbr: "北", visible: true, x: 200.32, km: 0.0 },
+    { id: "midori_chuo", name: "緑川公園", abbr: "公", visible: true, x: 593.92, km: 4.2 },
+    { id: "midori_minami", name: "南緑川", abbr: "南", visible: true, x: 987.52, km: 8.5 }
   ],
   trainTypes: JSON.parse(JSON.stringify(DEFAULT_TRAIN_TYPES)),
   rosters: [

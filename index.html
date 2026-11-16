@@ -4,12 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>箱ダイヤ描画システム - 車両運用図・仕業行路図作成ツール</title>
-  <meta name="description" content="ブラウザだけで鉄道の箱ダイヤ（駅軸）や時刻軸の運用線図（棒ダイヤ）を作成・編集し、.oud/.oud2読込や1:1ベクターPDF出力ができる無料Webアプリ（v1.1β）です。">
+  <meta name="description" content="ブラウザだけで鉄道の箱ダイヤ（駅軸）や時刻軸の運用線図（棒ダイヤ）を作成・編集し、.oud/.oud2読込や1:1ベクターPDF・画像保存ができる無料Webアプリ（v1.2.0）です。">
   <meta name="theme-color" content="#2F6F73">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="箱ダイヤ描画">
+  <link rel="manifest" href="manifest.json">
   <link rel="canonical" href="https://sekitan66325.github.io/box-diagram/">
 
   <meta property="og:title" content="箱ダイヤ描画システム - 車両運用図・仕業行路図作成ツール">
-  <meta property="og:description" content="ブラウザだけで鉄道の箱ダイヤ・時刻軸運用線図を作成・編集し、.oud/.oud2取込や変形サイズ対応の1:1ベクターPDF出力ができる無料Webアプリ（v1.1β）です。">
+  <meta property="og:description" content="ブラウザだけで鉄道の箱ダイヤ・時刻軸運用線図を作成・編集し、.oud/.oud2取込や変形サイズ対応の1:1ベクターPDF・画像保存ができる無料Webアプリ（v1.2.0）です。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://sekitan66325.github.io/box-diagram/">
   <meta property="og:image" content="https://sekitan66325.github.io/box-diagram/assets/apple-touch-icon.png">
@@ -44,15 +48,23 @@
     <!-- 上部メインツールバー -->
     <header class="app-header">
       <div class="brand">
-        <img src="assets/favicon.svg" alt="" class="brand-icon" width="24" height="24">
-        <span class="brand-title">箱ダイヤ描画システム</span>
-        <span class="beta-badge" title="公開バージョン v1.1β">v1.1β</span>
-        <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="portal-back-link" title="真岡鐵道 情報ポータル（sekitan66325.github.io）を新しいタブで開く">
-          情報ポータル ↗
-        </a>
+        <div class="brand-main">
+          <img src="assets/favicon.svg" alt="" class="brand-icon" width="24" height="24">
+          <span class="brand-title">箱ダイヤ描画システム</span>
+          <span class="beta-badge" title="公開バージョン v1.2.0">v1.2.0</span>
+          <a href="https://sekitan66325.github.io/" target="_blank" rel="noopener noreferrer" class="portal-back-link" title="真岡鐵道 情報ポータル（sekitan66325.github.io）を新しいタブで開く">
+            情報ポータル ↗
+          </a>
+        </div>
+        <!-- モバイル専用1行クイックバー（900px以下のみ表示） -->
+        <div class="mobile-header-quick">
+          <label for="inputFileOpen" id="btnMobileQuickOpen" class="btn btn-xs btn-secondary" title="JSON または OuDia (.oud/.oud2) を読み込む">読込</label>
+          <button type="button" id="btnMobileQuickExport" class="btn btn-xs btn-primary" aria-haspopup="true" aria-expanded="false" title="PDF出力・PNG/SVG画像保存メニュー">出力 ▾</button>
+          <button type="button" id="btnToggleMobileHeaderMenu" class="btn btn-xs btn-secondary" aria-expanded="false" title="全メニューを開く・閉じる">メニュー ▾</button>
+        </div>
       </div>
 
-      <div class="header-actions">
+      <div class="header-actions" id="headerActionsDrawer">
         <!-- 新規作成 & 見本（サンプル）選択 -->
         <button type="button" id="btnNewDiagram" class="btn btn-sm btn-primary-outline" title="見本を消して、自分の路線名・駅から新しく箱ダイヤを作成します">
           ＋ 新規作成
@@ -84,9 +96,9 @@
           <input type="file" id="inputFileOpen" accept=".json,.oud,.oud2" style="display: none;">
         </label>
 
-        <!-- 印刷 / PDF出力 -->
-        <button id="btnPrint" class="btn btn-primary btn-sm" title="ブラウザの印刷機能を開いてPDFとして保存">
-          印刷 / PDF出力
+        <!-- 統合出力メニュー (PDF印刷 / PNG画像 / SVG / 印刷HTML) -->
+        <button type="button" id="btnExportMenu" class="btn btn-primary btn-sm" aria-haspopup="true" aria-expanded="false" title="1:1ベクターPDF印刷・PNG画像保存・SVG出力メニューを開く">
+          PDF / 画像出力 ▾
         </button>
 
         <!-- 使い方・ヘルプ -->
@@ -106,11 +118,41 @@
       </div>
     </header>
 
+    <!-- 統合出力ドロップダウンメニュー（デスクトップ・モバイル共通） -->
+    <div id="exportMenuDropdown" class="export-menu-dropdown" role="menu" hidden>
+      <button type="button" id="btnPrint" class="export-menu-item" role="menuitem">
+        <span class="export-menu-title">印刷 / 1:1 ベクターPDF</span>
+        <span class="export-menu-sub">文字まで鮮明なPDF保存・印刷 (Ctrl+P)</span>
+      </button>
+      <button type="button" id="btnExportPngCurrent" class="export-menu-item" role="menuitem">
+        <span class="export-menu-title">画像保存 PNG（現在のページ）</span>
+        <span class="export-menu-sub">表示中ページを高解像度PNGで保存</span>
+      </button>
+      <button type="button" id="btnExportPngAll" class="export-menu-item" role="menuitem">
+        <span class="export-menu-title">画像保存 PNG（全ページ結合）</span>
+        <span class="export-menu-sub">全ページを縦につなげた1枚画像で保存</span>
+      </button>
+      <button type="button" id="btnExportSvg" class="export-menu-item" role="menuitem">
+        <span class="export-menu-title">SVGベクター保存（全ページ）</span>
+        <span class="export-menu-sub">拡大しても劣化しないSVGファイルを保存</span>
+      </button>
+      <button type="button" id="btnExportPrintHtml" class="export-menu-item" role="menuitem">
+        <span class="export-menu-title">印刷用HTMLを保存</span>
+        <span class="export-menu-sub">アプリ内ブラウザや他端末での印刷用</span>
+      </button>
+    </div>
+
     <!-- モバイル向け 表示切替バー（幅900px以下で表示） -->
     <nav id="mobileWorkspaceNav" class="mobile-workspace-nav" aria-label="表示切替">
       <button type="button" class="mobile-nav-btn active" data-mobile-view="preview" aria-pressed="true">図面プレビュー</button>
       <button type="button" class="mobile-nav-btn" data-mobile-view="editor" aria-pressed="false">データ編集・設定</button>
     </nav>
+
+    <!-- アプリ内ブラウザ向け 1行案内バー（モバイルWebView初回のみ表示） -->
+    <div id="mobileInAppHintBar" class="mobile-inapp-hint-bar" hidden>
+      <span class="mobile-inapp-hint-text">アプリ内ブラウザ表示中：外部ブラウザ（Safari/Chrome）推奨。このまま「出力 ▾ → 画像保存」も使えます。</span>
+      <button type="button" id="btnDismissInAppHint" class="btn-icon modal-close-btn" title="閉じる" aria-label="案内を閉じる">✕</button>
+    </div>
 
     <!-- メイン2ペイン領域 -->
     <div class="main-workspace">
@@ -125,63 +167,78 @@
       <!-- 右ペイン: プレビュー表示 -->
       <main class="preview-pane" id="previewPane">
         <div class="preview-toolbar">
-          <div class="preview-controls-group">
-            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">横軸:</span>
-            <div class="segmented-control" role="group" aria-label="横軸モード切替">
-              <button type="button" id="btnAxisStation" class="seg-btn active" title="横軸を駅順にする（標準箱ダイヤ）">駅</button>
-              <button type="button" id="btnAxisTime" class="seg-btn" title="横軸を時刻にする（運用線図／棒ダイヤ）">時刻</button>
+          <div class="preview-toolbar-primary">
+            <div class="preview-controls-group">
+              <span class="text-muted preview-lbl-axis" style="font-size: 11.5px; font-weight: 600;">横軸:</span>
+              <div class="segmented-control" role="group" aria-label="横軸モード切替">
+                <button type="button" id="btnAxisStation" class="seg-btn active" title="横軸を駅順にする（標準箱ダイヤ）">駅</button>
+                <button type="button" id="btnAxisTime" class="seg-btn" title="横軸を時刻にする（運用線図／棒ダイヤ）">時刻</button>
+              </div>
             </div>
-            <button type="button" id="btnToggleStationDir" class="btn btn-xs btn-secondary" title="上り・下りの向き（駅軸の左右方向）を切り替えます">左右: 左→右</button>
-            <select id="selectQuickPageSize" class="form-select preview-quick-size" title="現在の表示モードに適用する用紙サイズ">
-              <option value="AUTO">変形 (自動)</option>
-              <option value="CUSTOM">変形 (手動)</option>
-              <option value="A3">A3</option>
-              <option value="B4">B4</option>
-              <option value="A4" selected>A4</option>
-              <option value="B5">B5</option>
-              <option value="A5">A5</option>
-              <option value="B6">B6</option>
-            </select>
-            <div class="segmented-control" role="group" aria-label="用紙の向き切替">
-              <button type="button" id="btnQuickPortrait" class="seg-btn active" title="用紙を縦向きにする">縦</button>
-              <button type="button" id="btnQuickLandscape" class="seg-btn" title="用紙を横向きにする">横</button>
+
+            <div class="preview-controls-group preview-pager-group">
+              <span class="text-muted preview-lbl-page" style="font-size: 11.5px; font-weight: 600;">ページ:</span>
+              <button id="btnPrevPage" class="btn btn-xs btn-secondary" disabled>◀ 前へ</button>
+              <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 44px; text-align: center;">1 / 1</span>
+              <button id="btnNextPage" class="btn btn-xs btn-secondary" disabled>次へ ▶</button>
             </div>
-            <span id="quickCustomDimGroup" class="quick-custom-dim-group" hidden>
-              <input type="number" id="inputQuickCustomW" class="quick-dim-input font-mono" min="100" max="1800" step="5" title="用紙幅 (mm)" />
-              <span class="text-muted" style="font-size: 11px;">×</span>
-              <input type="number" id="inputQuickCustomH" class="quick-dim-input font-mono" min="80" max="1200" step="5" title="用紙高さ (mm)" />
-              <span class="text-muted" style="font-size: 10.5px;">mm</span>
-            </span>
-            <span id="quickPageSizeReadout" class="quick-size-readout font-mono" title="現在算出された変形用紙寸法" hidden></span>
-            <span id="quickPageModeBadge" class="quick-separate-badge" title="駅軸と時刻軸で別の用紙設定を使用中" hidden>別設定</span>
+
+            <button type="button" id="btnToggleMobilePreviewTools" class="btn btn-xs btn-secondary mobile-only-btn" aria-expanded="false" title="用紙・ズーム等の詳細設定を開く">表示設定 ▾</button>
           </div>
 
-          <div class="preview-controls-group">
-            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ページ:</span>
-            <button id="btnPrevPage" class="btn btn-xs btn-secondary" disabled>◀ 前へ</button>
-            <span id="pageIndicator" class="font-mono font-bold" style="font-size: 12px; min-width: 44px; text-align: center;">1 / 1</span>
-            <button id="btnNextPage" class="btn btn-xs btn-secondary" disabled>次へ ▶</button>
-            <label class="toggle-switch toggle-switch-sm" style="margin-left: 4px;" title="ONのとき全ページを縦に並べて表示します">
-              <input type="checkbox" class="toggle-input toggle-sm" id="checkShowAllPages" checked />
-              <span>全ページ</span>
-            </label>
-          </div>
+          <div class="preview-toolbar-advanced" id="previewToolbarAdvanced">
+            <div class="preview-controls-group">
+              <button type="button" id="btnToggleStationDir" class="btn btn-xs btn-secondary" title="上り・下りの向き（駅軸の左右方向）を切り替えます">左右: 左→右</button>
+              <select id="selectQuickPageSize" class="form-select preview-quick-size" title="現在の表示モードに適用する用紙サイズ">
+                <option value="AUTO">変形 (自動)</option>
+                <option value="CUSTOM">変形 (手動)</option>
+                <option value="A3">A3</option>
+                <option value="B4">B4</option>
+                <option value="A4" selected>A4</option>
+                <option value="B5">B5</option>
+                <option value="A5">A5</option>
+                <option value="B6">B6</option>
+              </select>
+              <div class="segmented-control" role="group" aria-label="用紙の向き切替">
+                <button type="button" id="btnQuickPortrait" class="seg-btn active" title="用紙を縦向きにする">縦</button>
+                <button type="button" id="btnQuickLandscape" class="seg-btn" title="用紙を横向きにする">横</button>
+              </div>
+            </div>
 
-          <div class="preview-controls-group">
-            <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ズーム:</span>
-            <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小">−</button>
-            <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;" title="表示倍率を選択（プレビュー上でマウスホイールでも拡大・縮小可能）">
-              <option value="fit-width" selected>横幅フィット</option>
-              <option value="fit">全体表示</option>
-              <option id="optZoomCustom" value="" hidden></option>
-              <option value="0.5">50%</option>
-              <option value="0.75">75%</option>
-              <option value="1.0">100%</option>
-              <option value="1.25">125%</option>
-              <option value="1.5">150%</option>
-              <option value="2.0">200%</option>
-            </select>
-            <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大">＋</button>
+            <div class="preview-controls-group">
+              <span id="quickCustomDimGroup" class="quick-custom-dim-group" hidden>
+                <input type="number" id="inputQuickCustomW" class="quick-dim-input font-mono" min="100" max="1800" step="5" title="用紙幅 (mm)" />
+                <span class="text-muted" style="font-size: 11px;">×</span>
+                <input type="number" id="inputQuickCustomH" class="quick-dim-input font-mono" min="80" max="1200" step="5" title="用紙高さ (mm)" />
+                <span class="text-muted" style="font-size: 10.5px;">mm</span>
+              </span>
+              <span id="quickPageSizeReadout" class="quick-size-readout font-mono" title="現在算出された変形用紙寸法" hidden></span>
+              <span id="quickPageModeBadge" class="quick-separate-badge" title="駅軸と時刻軸で別の用紙設定を使用中" hidden>別設定</span>
+            </div>
+
+            <div class="preview-controls-group">
+              <label class="toggle-switch toggle-switch-sm" style="margin-left: 2px;" title="ONのとき全ページを縦に並べて表示します">
+                <input type="checkbox" class="toggle-input toggle-sm" id="checkShowAllPages" checked />
+                <span>全ページ</span>
+              </label>
+            </div>
+
+            <div class="preview-controls-group">
+              <span class="text-muted" style="font-size: 11.5px; font-weight: 600;">ズーム:</span>
+              <button id="btnZoomOut" class="btn btn-xs btn-secondary" title="縮小">−</button>
+              <select id="selectZoom" class="form-select" style="height: 24px; padding: 0 4px; font-size: 11px;" title="表示倍率を選択（プレビュー上でマウスホイールでも拡大・縮小可能）">
+                <option value="fit-width" selected>横幅フィット</option>
+                <option value="fit">全体表示</option>
+                <option id="optZoomCustom" value="" hidden></option>
+                <option value="0.5">50%</option>
+                <option value="0.75">75%</option>
+                <option value="1.0">100%</option>
+                <option value="1.25">125%</option>
+                <option value="1.5">150%</option>
+                <option value="2.0">200%</option>
+              </select>
+              <button id="btnZoomIn" class="btn btn-xs btn-secondary" title="拡大">＋</button>
+            </div>
           </div>
         </div>
 
@@ -332,8 +389,8 @@
           <h3>4. 印刷 / PDF出力とデータ保存のコツ</h3>
           <div class="help-columns">
             <div class="help-card">
-              <h4>きれいなベクターPDFを出す印刷設定</h4>
-              <p>上部の <code>印刷 / PDF出力</code>（または <kbd>Ctrl</kbd>+<kbd>P</kbd>）を押すと印刷ダイアログが開きます。ブラウザ側で以下を設定すると、1:1のベクターPDFとして最も綺麗に仕上がります。</p>
+              <h4>きれいなベクターPDF・画像保存のコツ</h4>
+              <p>上部の <code>PDF / 画像出力 ▾</code>（または <kbd>Ctrl</kbd>+<kbd>P</kbd>）から「印刷 / 1:1 ベクターPDF」や「PNG画像・SVG保存」を選べます。ベクターPDF印刷時はブラウザ側で以下を設定すると最も綺麗に仕上がります。</p>
               <ul class="help-list">
                 <li>送信先：<strong>PDFに保存</strong>（Chrome / Edge 標準。<code>Microsoft Print to PDF</code> や実プリンタは「変形」非対応かつ縦固定になりやすいため非推奨）</li>
                 <li>用紙サイズ・向き：<strong>印刷スタイルから自動反映</strong>（A3 / B4 / A4 / B5 / A5 横・縦、および変形 mm を指定済み）</li>
@@ -348,7 +405,7 @@
                 <li><code>保存 (JSON)</code> を押すと、現在編集中の全設定・全運用・注記を含む JSON ファイルがダウンロードされます。</li>
                 <li>次回作業時は <code>読込 (JSON)</code> からそのファイルを選択するだけで状態を復元できます。</li>
                 <li>OuDia / OuDiaSecond の <code>.oud</code>・<code>.oud2</code> ファイルは <code>読込 (.oud/.oud2)</code> から取り込みできます（対象ダイヤや表示駅を選んで変換）。</li>
-                <li>ブラウザを閉じると編集内容は保持されないため、こまめな JSON 保存をおすすめします。</li>
+                <li>編集中の下書きは端末ブラウザ内に自動保存・次回自動復元されますが、ブラウザデータ削除に備えこまめな <code>保存 (JSON)</code> をおすすめします。</li>
               </ul>
             </div>
           </div>
@@ -608,7 +665,7 @@
       <div class="modal-header">
         <div>
           <h2 id="termsModalTitle" class="modal-title">利用規約・クレジット表記・免責事項</h2>
-          <p class="modal-subtitle">箱ダイヤ描画システム（v1.1β）をご利用いただく際のルールとお願いです。</p>
+          <p class="modal-subtitle">箱ダイヤ描画システム（v1.2.0）をご利用いただく際のルールとお願いです。</p>
         </div>
         <button id="btnCloseTerms" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="利用規約を閉じる">✕</button>
       </div>
@@ -634,22 +691,22 @@
             <button type="button" id="btnCopyTermsCredit" class="btn btn-xs btn-secondary" title="表記例をクリップボードにコピー">表記例をコピー</button>
           </div>
           <p class="text-muted" style="font-size: 11.5px; margin-top: 6px;">
-            ※ 記載場所は「図面内の著作権欄」「SNS投稿本文」「Web記事や概要欄」のいずれでも構いません。左パネルの「基本設定」にある <code>＋ クレジットを追記</code> ボタンを使うと、図面右上にワンクリックで追記できます。なお今後正式名称が変更された場合も、旧名称やURL表記のまま過去作を修正する必要はありません。
+            ※ 記載場所は「図面内の著作権欄」「SNS投稿本文」「Web記事や概要欄」のいずれでも構いません。なお、Web 公開版の図面には各ページ下部端にも控えめなグレー表記が常時自動表示されます（上部の作成者欄へ明記したい場合は左パネル「基本設定」の <code>＋ クレジットを追記</code> ボタンをご利用ください）。今後正式名称が変更された場合も、旧名称やURL表記のまま過去作を修正する必要はありません。
           </p>
         </section>
 
         <section class="terms-section">
           <h3>第3条（免責事項・データ保全について）</h3>
           <ul class="help-list">
-            <li><strong>データ破損・消失に関する免責：</strong> 本ソフトは 100% ブラウザ内のローカル環境のみで動作します。ブラウザのタブ閉じ・リロード・不具合・端末トラブル等により編集中のデータが破損または消失した場合でも、開発者は<strong>一切の責任を負いません</strong>。重要なデータはこまめに <code>保存 (JSON)</code> で手元にバックアップしてください。</li>
+            <li><strong>データ破損・消失に関する免責：</strong> 本ソフトは 100% ブラウザ内のローカル環境のみで動作します（作業中の下書きは端末ブラウザ内に自動保存・復元されますが、外部サーバーへの保存は行いません）。端末トラブル・ブラウザデータ削除・不具合等によりデータが破損または消失した場合でも、開発者は<strong>一切の責任を負いません</strong>。重要なデータはこまめに <code>保存 (JSON)</code> で手元にバックアップしてください。</li>
             <li><strong>描画結果・取り込み結果の保証：</strong> 本ソフトは現状有姿（AS-IS）で提供されており、<code>.oud</code> / <code>.oud2</code> ファイルの変換精度、描画内容の正確性・完全性、および本ソフトの利用または利用不能によって生じたいかなる損害についても、開発者は一切の責任を負いません。</li>
           </ul>
         </section>
 
         <section class="terms-section">
-          <h3>第4条（プライバシー・禁止事項・改定）</h3>
+          <h3>第4条（プライバシー・アクセス解析・禁止事項・改定）</h3>
           <ul class="help-list">
-            <li><strong>外部送信なし：</strong> 作成したダイヤデータ・読み込んだ JSON / <code>.oud</code> / <code>.oud2</code> ファイルが外部サーバーへ送信されることはありません（アクセス状況把握のため Google Analytics による匿名計測のみ行っています）。</li>
+            <li><strong>アクセス解析・個人情報非取得：</strong> 品質改善および利用動向の把握のため、Web版では <strong>Google Analytics</strong> によるアクセス・利用状況の計測を使用しています。なお、作成したダイヤの内容や個人を特定できる情報（個人情報）が取得・送信されることはありません。</li>
             <li><strong>禁止事項：</strong> 公序良俗に反する利用、本ソフトや作者の信用を著しく毀損する利用はお控えください。</li>
             <li><strong>規約の変更：</strong> 本規約は予告なく改定される場合があります。全文は <a href="./TERMS.md" target="_blank" rel="noopener noreferrer" class="footer-portal-link">TERMS.md ↗</a> でもご確認いただけます。</li>
           </ul>
@@ -657,9 +714,38 @@
       </div>
 
       <div class="modal-footer">
-        <span class="text-muted" style="font-size: 11px;">最終改定: 2026年11月 / 箱ダイヤ描画システム v1.1β</span>
+        <span class="text-muted" style="font-size: 11px;">最終改定: 2026年11月 / 箱ダイヤ描画システム v1.2.0</span>
         <div class="modal-footer-actions">
           <button type="button" id="btnCloseTermsFooter" class="btn btn-primary btn-sm">同意して閉じる</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 画像保存・共有 モーダル（主にモバイル・アプリ内ブラウザ向け） -->
+  <div id="imageExportModalBackdrop" class="modal-backdrop" hidden>
+    <div class="modal-dialog image-export-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="imageExportModalTitle">
+      <div class="modal-header">
+        <div>
+          <h2 id="imageExportModalTitle" class="modal-title">画像書き出し（PNG）</h2>
+          <p id="imageExportInfo" class="modal-subtitle">高解像度画像を生成しました。</p>
+        </div>
+        <button id="btnCloseImageExport" type="button" class="btn-icon modal-close-btn" title="閉じる (Esc)" aria-label="画像書き出しモーダルを閉じる">✕</button>
+      </div>
+      <div class="modal-body image-export-modal-body">
+        <p class="text-muted" style="font-size: 12px; margin: 0 0 8px 0;">
+          スマホ・アプリ内ブラウザで自動保存されない場合は、下の画像を<strong>長押しして「写真に保存 / 画像を保存」</strong>または「共有」をお使いください。
+        </p>
+        <div class="image-export-preview-wrap">
+          <img id="imageExportPreviewImg" class="image-export-preview-img" alt="書き出した箱ダイヤ画像プレビュー" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <span class="text-muted" style="font-size: 11px;">PNG 高解像度書き出し</span>
+        <div class="modal-footer-actions">
+          <button type="button" id="btnShareExportedImage" class="btn btn-sm btn-secondary" hidden>共有 / 写真へ保存</button>
+          <button type="button" id="btnDownloadExportedImage" class="btn btn-sm btn-primary">PNG をダウンロード</button>
+          <button type="button" id="btnCloseImageExportFooter" class="btn btn-sm btn-secondary">閉じる</button>
         </div>
       </div>
     </div>
@@ -669,6 +755,7 @@
   <div id="appToast" class="app-toast" role="status" aria-live="polite" hidden></div>
 
   <!-- スクリプト読み込み順序 -->
+  <script src="js/analytics.js"></script>
   <script src="js/sample-data.js"></script>
   <script src="js/data-model.js"></script>
   <script src="js/oud-parser.js"></script>

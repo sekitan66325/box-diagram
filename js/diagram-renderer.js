@@ -90,6 +90,15 @@ class BoxDiagramRenderer {
    */
   resolveAutoLayout(data, rawCfg, timeRange) {
     const xAxisMode = rawCfg.xAxisMode === "time" ? "time" : "station";
+    const col = this.getEffectiveColumnSettings(data, Object.assign({}, rawCfg, {
+      isAutoPageSize: true,
+      isCustomPageSize: false
+    }));
+    const borderW = 2.56;
+    const extraSidePx = (col.rosterColW - 66.40)
+      + (col.showOut ? col.outColW + borderW : 0)
+      + (col.showIn ? col.inColW + borderW : 0)
+      + (col.showDistCol ? col.distColW + borderW : 0);
     let autoWidthMm = 297;
 
     if (xAxisMode === "time" && timeRange) {
@@ -117,20 +126,22 @@ class BoxDiagramRenderer {
       } else if (shortRatio >= 0.4 || hours <= 10) {
         targetPxPerHour = 155;
       }
-      const rawCanvasW = hours * targetPxPerHour + 245.92;
+      const rawCanvasW = hours * targetPxPerHour * col.hScale + 245.92 + extraSidePx;
       const rawMmW = rawCanvasW / 5.345;
-      autoWidthMm = Math.max(297, Math.min(1400, Math.ceil(rawMmW / 5) * 5));
+      const minAutoW = col.hScale < 1.0 ? Math.max(180, Math.round(297 * col.hScale)) : 297;
+      autoWidthMm = Math.max(minAutoW, Math.min(1800, Math.ceil(rawMmW / 5) * 5));
     } else {
       const visibleStations = (data.stations || []).filter(s => s.visible !== false);
-      if (visibleStations.length <= 4) {
-        autoWidthMm = 210;
-      } else {
-        autoWidthMm = Math.max(210, Math.min(1000, Math.ceil((75 + Math.max(1, visibleStations.length - 1) * 52) / 5) * 5));
-      }
+      const baseStationMm = visibleStations.length <= 4
+        ? 210
+        : (75 + Math.max(1, visibleStations.length - 1) * 52);
+      const extraSideMm = extraSidePx / 5.345;
+      const minStAutoW = col.hScale < 1.0 ? Math.max(150, Math.round(210 * col.hScale)) : 210;
+      autoWidthMm = Math.max(minStAutoW, Math.min(1400, Math.ceil((baseStationMm * col.hScale + extraSideMm) / 5) * 5));
     }
 
-    // 最大印刷高さ上限 (380mm) 基準で改ページを計算し、実内容高さを測る
-    const AUTO_MAX_HEIGHT_MM = 380;
+    // 最大印刷高さ上限 (標準380mm、縦倍率>1時は上限拡大) 基準で改ページを計算し、実内容高さを測る
+    const AUTO_MAX_HEIGHT_MM = col.vScale > 1.05 ? Math.min(680, Math.round(380 * col.vScale)) : 380;
     const capDims = BoxDiagramDataModel.computeDimensionsFromMm(autoWidthMm, AUTO_MAX_HEIGHT_MM);
     const capCfg = Object.assign({}, rawCfg, capDims, { isAutoPageSize: true, isCustomPageSize: false });
     const capGeom = this.getPageGeometry(data, capCfg);
@@ -161,7 +172,7 @@ class BoxDiagramRenderer {
 
       const neededCanvasH = contentEndY + 72.0;
       const neededMm = Math.ceil((neededCanvasH / 5.345) / 5) * 5;
-      maxNeededHeightMm = Math.max(maxNeededHeightMm, Math.min(420, neededMm));
+      maxNeededHeightMm = Math.max(maxNeededHeightMm, Math.min(Math.max(420, AUTO_MAX_HEIGHT_MM + 40), neededMm));
     }
 
     const finalDims = BoxDiagramDataModel.computeDimensionsFromMm(autoWidthMm, maxNeededHeightMm);
@@ -178,8 +189,59 @@ class BoxDiagramRenderer {
   }
 
   /**
+   * サイド列（運用番号・出区・入区・走行距離）と縮尺設定を解決する共通ヘルパー
+   */
+  getEffectiveColumnSettings(data, cfg = null) {
+    const settings = (data && data.settings) || {};
+    const round2 = (v) => Math.round(v * 100) / 100;
+    const isDynamicSize = !!(cfg && (cfg.isAutoPageSize || cfg.isCustomPageSize));
+    const isCompact = !!(cfg && !isDynamicSize && cfg.canvasScale < 0.9);
+    const widthScale = isCompact ? 0.85 : 1.0;
+
+    const clampW = (val, fb, mn, mx) => {
+      if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.clampWidth) {
+        return BoxDiagramDataModel.clampWidth(val, fb, mn, mx);
+      }
+      const n = Number(val);
+      return Number.isFinite(n) ? Math.max(mn, Math.min(mx, n)) : fb;
+    };
+
+    const rawRosterColW = clampW(settings.rosterColWidth, 66.40, 42, 140);
+    const rosterColW = (rawRosterColW === 66.40 && isCompact) ? 56.0 : round2(rawRosterColW * widthScale);
+    const showOut = !!settings.showDepotOutCol;
+    const showIn = !!settings.showDepotInCol;
+    const rawDistMode = ["none", "rightCol", "underInDepot", "underRoster"].includes(settings.distanceDisplayMode)
+      ? settings.distanceDisplayMode
+      : "none";
+    const showDistCol = (rawDistMode === "rightCol") || (rawDistMode === "underInDepot" && !showIn);
+    const distanceDisplayMode = showDistCol && rawDistMode === "underInDepot" ? "rightCol" : rawDistMode;
+
+    const outColW = showOut ? round2(clampW(settings.depotOutColWidth, 68, 40, 160) * widthScale) : 0;
+    const inColW = showIn ? round2(clampW(settings.depotInColWidth, 68, 40, 160) * widthScale) : 0;
+    const distColW = showDistCol ? round2(clampW(settings.distanceColWidth, 56, 38, 120) * widthScale) : 0;
+    const vScale = this.getScaleSetting(settings, "tableVerticalScale", 1.0, 0.5, 1.8);
+    const hScale = this.getScaleSetting(settings, "tableHorizontalScale", 1.0, 0.6, 1.8);
+
+    return {
+      isDynamicSize,
+      isCompact,
+      rawRosterColW,
+      rosterColW,
+      showOut,
+      showIn,
+      showDistCol,
+      distanceDisplayMode,
+      outColW,
+      inColW,
+      distColW,
+      vScale,
+      hScale
+    };
+  }
+
+  /**
    * 現在の設定から論理SVGキャンバス＆枠座標を解決する
-   * （A4・B5縦向きでは従来座標と0.00px完全一致を維持）
+   * （A4・B5縦向き＆標準2列＆横倍率1.0では従来座標と0.00px完全一致を維持）
    */
   getPageGeometry(data, overridePageCfg = null) {
     const settings = (data && data.settings) || {};
@@ -202,15 +264,73 @@ class BoxDiagramRenderer {
     const W = cfg.canvasW;
     const H = cfg.canvasH;
     const isLandscape = cfg.isLandscape;
-    const isDynamicSize = !!(cfg.isAutoPageSize || cfg.isCustomPageSize);
-    const isExactClassicA4B5Portrait = (!isDynamicSize && cfg.canvasScale === 1.0 && !isLandscape);
-    const isCompact = !isDynamicSize && cfg.canvasScale < 0.9;
+    const col = this.getEffectiveColumnSettings(data, cfg);
+    const {
+      isDynamicSize, isCompact, rawRosterColW, rosterColW,
+      showOut, showIn, showDistCol, distanceDisplayMode,
+      outColW, inColW, distColW, vScale, hScale
+    } = col;
+
+    const isExactClassicA4B5Portrait = (
+      !isDynamicSize &&
+      cfg.canvasScale === 1.0 &&
+      !isLandscape &&
+      !showOut &&
+      !showIn &&
+      !showDistCol &&
+      hScale === 1.0 &&
+      rawRosterColW === 66.40
+    );
 
     const borderWidth = 2.56;
-    const tableLeft = isCompact ? 38.0 : 53.92;
-    const rosterColW = isCompact ? 56.0 : 66.40;
+    const baseTableLeft = isCompact ? 38.0 : 53.92;
+    const baseTableRight = isExactClassicA4B5Portrait ? 1064.96 : round2(W - baseTableLeft - 3.68);
+
+    let tableLeft = baseTableLeft;
+    let tableRight = baseTableRight;
+
+    if (!isDynamicSize && hScale !== 1.0) {
+      const baseW = baseTableRight - baseTableLeft;
+      const nonPlotW = rosterColW +
+        (showOut ? borderWidth + outColW : 0) +
+        (showIn ? borderWidth + inColW : 0) +
+        (showDistCol ? borderWidth + distColW : 0);
+      if (hScale < 1.0) {
+        const minTableW = Math.min(baseW, nonPlotW + 160);
+        const scaledW = Math.max(minTableW, round2(baseW * hScale));
+        const trimHalf = (baseW - scaledW) / 2;
+        tableLeft = round2(baseTableLeft + trimHalf);
+        tableRight = round2(baseTableRight - trimHalf);
+      } else {
+        const minSafeMargin = isCompact ? 14.0 : 18.0;
+        const availLeft = Math.max(0, baseTableLeft - minSafeMargin);
+        const availRight = Math.max(0, (W - minSafeMargin - borderWidth) - baseTableRight);
+        const expandHalf = Math.min(availLeft, availRight, (baseW * (hScale - 1.0)) / 2);
+        tableLeft = round2(baseTableLeft - expandHalf);
+        tableRight = round2(baseTableRight + expandHalf);
+      }
+    }
+
     const tableInnerX = round2(tableLeft + rosterColW);
-    const tableRight = isExactClassicA4B5Portrait ? 1064.96 : round2(W - tableLeft - 3.68);
+
+    const outColLeft = showOut ? round2(tableInnerX + borderWidth) : tableInnerX;
+    const outColRight = showOut ? round2(outColLeft + outColW) : tableInnerX;
+    const outColCenterX = showOut ? round2(outColLeft + outColW / 2) : tableInnerX;
+    const plotContainerLeft = showOut ? round2(outColRight + borderWidth) : round2(tableInnerX + borderWidth);
+
+    let cursorRight = tableRight;
+    const distColRight = cursorRight;
+    const distColLeft = showDistCol ? round2(distColRight - distColW) : cursorRight;
+    const distColCenterX = showDistCol ? round2(distColLeft + distColW / 2) : cursorRight;
+    if (showDistCol) {
+      cursorRight = round2(distColLeft - borderWidth);
+    }
+
+    const inColRight = cursorRight;
+    const inColLeft = showIn ? round2(inColRight - inColW) : cursorRight;
+    const inColCenterX = showIn ? round2(inColLeft + inColW / 2) : cursorRight;
+    const plotContainerRight = showIn ? round2(inColLeft - borderWidth) : cursorRight;
+
     const headerTop = 48.64;
     const headerBottom = 98.72;
     const Y_MAX = isExactClassicA4B5Portrait
@@ -221,11 +341,35 @@ class BoxDiagramRenderer {
       ? 1552.96
       : (isDynamicSize ? round2(H - 28.0) : round2(H - (isCompact ? 26.0 : 34.40)));
 
-    const stationPlotLeft = isExactClassicA4B5Portrait ? 200.32 : round2(tableInnerX + (isCompact ? 56.0 : 80.0));
-    const stationPlotRight = isExactClassicA4B5Portrait ? 987.52 : round2(tableRight - (isCompact ? 54.0 : 77.44));
+    const rawPlotW = Math.max(80, plotContainerRight - plotContainerLeft);
+    const hExpandPadScale = (!isDynamicSize && hScale > 1.0) ? Math.max(0.65, 1.0 / hScale) : 1.0;
 
-    const timePlotLeft = round2(tableInnerX + (isCompact ? 24.0 : 34.0));
-    const timePlotRight = round2(tableRight - (isCompact ? 24.0 : 34.0));
+    const baseStPadL = showOut ? (isCompact ? 30.0 : 42.0) : (isCompact ? 56.0 : 80.0);
+    const baseStPadR = (showIn || showDistCol) ? (isCompact ? 28.0 : 40.0) : (isCompact ? 54.0 : 77.44);
+    const minStPadL = showOut ? 26.0 : 44.0;
+    const minStPadR = (showIn || showDistCol) ? 24.0 : 42.0;
+    let stPadL = Math.max(minStPadL, round2(baseStPadL * hExpandPadScale));
+    let stPadR = Math.max(minStPadR, round2(baseStPadR * hExpandPadScale));
+    if (rawPlotW - (stPadL + stPadR) < 80) {
+      const shrink = Math.max(0.35, (rawPlotW - 80) / Math.max(1, stPadL + stPadR));
+      stPadL = round2(stPadL * shrink);
+      stPadR = round2(stPadR * shrink);
+    }
+
+    const stationPlotLeft = isExactClassicA4B5Portrait ? 200.32 : round2(plotContainerLeft + stPadL);
+    const stationPlotRight = isExactClassicA4B5Portrait ? 987.52 : round2(plotContainerRight - stPadR);
+
+    const baseTmPad = isCompact ? 24.0 : 34.0;
+    let tmPad = Math.max(16.0, round2(baseTmPad * hExpandPadScale));
+    if (rawPlotW - 2 * tmPad < 80) {
+      tmPad = round2(Math.max(10.0, (rawPlotW - 80) / 2));
+    }
+    const timePlotLeft = round2(plotContainerLeft + tmPad);
+    const timePlotRight = round2(plotContainerRight - tmPad);
+
+    const rosterLabelX = isExactClassicA4B5Portrait
+      ? 88.40
+      : round2(tableLeft + borderWidth + (rosterColW - borderWidth) / 2);
 
     return {
       pageConfig: cfg,
@@ -236,6 +380,7 @@ class BoxDiagramRenderer {
       orientation: cfg.orientation,
       isLandscape,
       isDynamicSize,
+      isCompact,
       canvasScale: cfg.canvasScale,
       W,
       H,
@@ -244,6 +389,26 @@ class BoxDiagramRenderer {
       rosterColW,
       tableInnerX,
       tableRight,
+      showOut,
+      showIn,
+      showDistCol,
+      distanceDisplayMode,
+      outColW,
+      inColW,
+      distColW,
+      outColLeft,
+      outColRight,
+      outColCenterX,
+      inColLeft,
+      inColRight,
+      inColCenterX,
+      distColLeft,
+      distColRight,
+      distColCenterX,
+      plotContainerLeft,
+      plotContainerRight,
+      vScale,
+      hScale,
       headerTop,
       headerBottom,
       Y_MAX,
@@ -251,7 +416,7 @@ class BoxDiagramRenderer {
       footerY,
       titleLeftX: isExactClassicA4B5Portrait ? 54.24 : round2(tableLeft + 0.32),
       copyRightX: isExactClassicA4B5Portrait ? 1066.24 : round2(tableRight + 1.28),
-      rosterLabelX: isExactClassicA4B5Portrait ? 88.40 : round2(tableLeft + rosterColW * 0.519),
+      rosterLabelX,
       stationPlotLeft,
       stationPlotRight,
       timePlotLeft,
@@ -319,6 +484,119 @@ class BoxDiagramRenderer {
   }
 
   /**
+   * テキストが指定幅内に収まるようフォントサイズを自動フィットする
+   */
+  _fitSingleLineFontSize(text, baseSize, maxWidth, minSize = 6.8) {
+    if (!text || !Number.isFinite(maxWidth) || maxWidth <= 0) return baseSize;
+    const est = this._estimateTextWidth(text, baseSize);
+    if (est <= maxWidth) return baseSize;
+    return Math.round(Math.max(minSize, baseSize * (maxWidth / est)) * 100) / 100;
+  }
+
+  /**
+   * 出区・入区・走行距離セルの文字行数から必要な最小ブロック内側高さを求める
+   */
+  getMinSideColumnBlockContentHeight(data, roster) {
+    const col = this.getEffectiveColumnSettings(data, null);
+    let maxLines = 1;
+    let needsExtraSub = false;
+
+    if (typeof BoxDiagramDataModel !== "undefined") {
+      if (col.showOut && BoxDiagramDataModel.resolveRosterDepotDisplay) {
+        const outDisp = BoxDiagramDataModel.resolveRosterDepotDisplay(roster, data, "out");
+        maxLines = Math.max(maxLines, outDisp.lines.length);
+      }
+      if (col.showIn && BoxDiagramDataModel.resolveRosterDepotDisplay) {
+        const inDisp = BoxDiagramDataModel.resolveRosterDepotDisplay(roster, data, "in");
+        let inLines = inDisp.lines.length;
+        if (col.distanceDisplayMode === "underInDepot" && BoxDiagramDataModel.calculateRosterDistanceKm) {
+          const distInfo = BoxDiagramDataModel.calculateRosterDistanceKm(roster, data);
+          if (distInfo.hasValidKm) {
+            inLines += 1;
+            needsExtraSub = true;
+          }
+        }
+        maxLines = Math.max(maxLines, inLines);
+      }
+    }
+    if (col.distanceDisplayMode === "underRoster") {
+      needsExtraSub = true;
+    }
+
+    if (maxLines >= 2) {
+      return Math.round((maxLines * 11.4 + 10.0) * 100) / 100;
+    }
+    if (needsExtraSub) {
+      return 38.0;
+    }
+    return 0;
+  }
+
+  /**
+   * 目標ページ数に縦方向を収める推奨全体縦縮尺 (0.50..1.00) を二分探索で算出する
+   */
+  suggestVerticalScaleForPages(data, targetPages = 1) {
+    if (!data || !Array.isArray(data.rosters) || data.rosters.length === 0) {
+      return { scale: 1.0, alreadyFits: true, fits: true, currentPages: 1 };
+    }
+    const baseData = Object.assign({}, data, {
+      settings: Object.assign({}, data.settings || {}, {
+        pageBreakMode: "auto"
+      })
+    });
+    const measurePagesAt = (vScaleVal) => {
+      const testData = Object.assign({}, baseData, {
+        settings: Object.assign({}, baseData.settings, { tableVerticalScale: vScaleVal })
+      });
+      const geom = this.getPageGeometry(testData);
+      if (geom.pageConfig && geom.pageConfig.isAutoPageSize) {
+        return { pages: 1, fits: true };
+      }
+      const xAxisMode = geom.xAxisMode === "time" ? "time" : "station";
+      const availH = geom.Y_MAX - (geom.headerBottom + geom.borderWidth);
+      if (targetPages === 1) {
+        let totalH = 0;
+        for (let i = 0; i < testData.rosters.length; i++) {
+          totalH += xAxisMode === "time"
+            ? this.calculateTimeAxisRosterBlockHeight(testData, testData.rosters[i], i === 0)
+            : this.calculateRosterBlockHeight(testData, testData.rosters[i], i === 0);
+        }
+        return { pages: totalH <= availH ? 1 : 2, fits: totalH <= availH };
+      }
+      const noBreakRosters = testData.rosters.map(r => Object.assign({}, r, { pageBreakAfter: false }));
+      const testNoBreakData = Object.assign({}, testData, { rosters: noBreakRosters });
+      const paged = this.paginateRosters(testNoBreakData, geom);
+      return { pages: paged.length, fits: paged.length <= targetPages };
+    };
+
+    const atCurrent1 = measurePagesAt(1.0);
+    if (atCurrent1.fits) {
+      return { scale: 1.0, alreadyFits: true, fits: true, currentPages: atCurrent1.pages };
+    }
+    const atMin = measurePagesAt(0.5);
+    if (!atMin.fits) {
+      return { scale: 0.5, alreadyFits: false, fits: false, currentPages: atMin.pages };
+    }
+
+    let lo = 0.50;
+    let hi = 1.00;
+    let best = 0.50;
+    for (let iter = 0; iter < 20; iter++) {
+      const mid = (lo + hi) / 2;
+      if (measurePagesAt(mid).fits) {
+        best = mid;
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    const rounded = Math.max(0.50, Math.min(1.0, Math.floor(best * 100) / 100));
+    const checkRounded = measurePagesAt(rounded);
+    const finalScale = checkRounded.fits ? rounded : Math.max(0.50, Math.round((rounded - 0.01) * 100) / 100);
+    return { scale: finalScale, alreadyFits: false, fits: true, currentPages: targetPages };
+  }
+
+  /**
    * 運用ブロックの所要高さを計算（パラメトリック公式）
    */
   calculateRosterBlockHeight(data, roster, isFirstOnPage) {
@@ -327,7 +605,8 @@ class BoxDiagramRenderer {
     const S = typeof settings.rosterStepRows === "number" ? settings.rosterStepRows : 2;
     const P = typeof settings.blockPaddingRows === "number" ? settings.blockPaddingRows : 2;
     const subHeaderMode = settings.subHeaderMode || "omitFirst";
-    const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+    const vScale = this.getScaleSetting(settings, "tableVerticalScale", 1.0, 0.5, 1.8);
+    const scale = (typeof roster.rowScale === "number" ? roster.rowScale : 1.0) * vScale;
 
     const borderWidth = 2.56;
     const subLineWidth = 1.28;
@@ -341,7 +620,7 @@ class BoxDiagramRenderer {
 
     const trains = roster.trains || [];
     if (trains.length === 0) {
-      h += 40.0;
+      h += scale === 1.0 ? 40.0 : Math.max(24.0, 40.0 * scale);
     } else {
       h += P * R * scale; // 開始余白
       for (let k = 1; k < trains.length; k++) {
@@ -349,6 +628,11 @@ class BoxDiagramRenderer {
         h += stepRows * R * scale;
       }
       h += P * R * scale - delta; // 終了余白 (25.28px)
+    }
+
+    const minSideH = this.getMinSideColumnBlockContentHeight(data, roster);
+    if (minSideH > h) {
+      h = minSideH;
     }
 
     h += borderWidth; // 境界線 2.56px
@@ -371,6 +655,140 @@ class BoxDiagramRenderer {
     return Math.round((geom.stationPlotLeft + mappedT * dstSpan) * 100) / 100;
   }
 
+  getRoleFontStyle(data, role) {
+    const raw = data && data.settings && data.settings.fontStyles && data.settings.fontStyles[role];
+    if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.normalizeFontStyleItem) {
+      return BoxDiagramDataModel.normalizeFontStyleItem(raw);
+    }
+    const src = (raw && typeof raw === "object") ? raw : {};
+    const sizeNum = typeof src.sizeScale === "number" ? src.sizeScale : 1.0;
+    const lsNum = typeof src.letterSpacing === "number" ? src.letterSpacing : 0;
+    return {
+      bold: !!src.bold,
+      italic: !!src.italic,
+      underline: !!src.underline,
+      sizeScale: Math.max(0.65, Math.min(1.6, sizeNum)),
+      letterSpacing: Math.max(-1.0, Math.min(3.0, lsNum)),
+      tabularNums: !!src.tabularNums,
+      customFamily: typeof src.customFamily === "string" ? src.customFamily : ""
+    };
+  }
+
+  scaleRoleFontSize(data, role, basePx) {
+    const st = this.getRoleFontStyle(data, role);
+    return Math.round(basePx * st.sizeScale * 100) / 100;
+  }
+
+  buildRoleFontCss(className, fontCss, styleObj, baseLetterSpacing = 0) {
+    const props = [`font-family: ${fontCss};`];
+    if (styleObj.bold) props.push("font-weight: 700;");
+    if (styleObj.italic) props.push("font-style: italic;");
+    if (styleObj.underline) props.push("text-decoration: underline;");
+    if (styleObj.tabularNums) props.push("font-variant-numeric: tabular-nums;");
+    const totalLs = Math.round((baseLetterSpacing + (styleObj.letterSpacing || 0)) * 100) / 100;
+    if (totalLs !== 0) props.push(`letter-spacing: ${totalLs}px;`);
+    return `.${className} { ${props.join(" ")} }`;
+  }
+
+  /**
+   * 各運用ブロックの左右サイド列（運用番号・出区・入区・走行距離）の共通描画ヘルパー
+   */
+  renderRosterSideColumns(elements, data, roster, geom, blockTopY, blockBottomY) {
+    const settings = (data && data.settings) || {};
+    const cellH = Math.max(10, blockBottomY - blockTopY);
+    const centerY = (blockTopY + blockBottomY) / 2;
+    const distMode = geom.distanceDisplayMode || "none";
+    const distDec = settings.distanceDecimalPlaces === 0 ? 0 : 1;
+
+    const calcDistLabel = () => {
+      if (typeof BoxDiagramDataModel === "undefined" || !BoxDiagramDataModel.calculateRosterDistanceKm) {
+        return "";
+      }
+      const d = BoxDiagramDataModel.calculateRosterDistanceKm(roster, data);
+      return d.hasValidKm ? BoxDiagramDataModel.formatDistanceLabel(d.km, distDec) : "-";
+    };
+
+    // 1. 運用番号列 (+ optional underRoster 距離)
+    const rosterText = roster.name || roster.id || "";
+    const baseRosterSize = this.scaleRoleFontSize(data, "roster", 18.72);
+    const maxRosterW = Math.max(18, geom.rosterColW - 8);
+    const fitRosterSize = this._fitSingleLineFontSize(rosterText, baseRosterSize, maxRosterW, 8.2);
+    const showUnderRoster = distMode === "underRoster" && cellH >= 30;
+    const distUnderRosterText = showUnderRoster ? calcDistLabel() : "";
+
+    if (showUnderRoster && distUnderRosterText && distUnderRosterText !== "-") {
+      const subSize = this._fitSingleLineFontSize(
+        distUnderRosterText,
+        this.scaleRoleFontSize(data, "roster", 9.6),
+        maxRosterW,
+        6.8
+      );
+      const nameY = (centerY - 1.2).toFixed(2);
+      const distY = (centerY + 12.2).toFixed(2);
+      elements.push(`
+        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${nameY}" font-size="${fitRosterSize}" fill="#000000" text-anchor="middle">${this.escapeXml(rosterText)}</text>
+        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${distY}" font-size="${subSize}" fill="#334155" text-anchor="middle">${this.escapeXml(distUnderRosterText)}</text>
+      `);
+    } else {
+      const rosterCenterY = centerY + 6.32;
+      elements.push(`
+        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="${fitRosterSize}" fill="#000000" text-anchor="middle">${this.escapeXml(rosterText)}</text>
+      `);
+    }
+
+    const renderStackedLines = (items, centerX, colW, baseSize = 9.6) => {
+      if (!items || items.length === 0) return;
+      const n = items.length;
+      const availH = Math.max(10, cellH - 4);
+      const maxColW = Math.max(16, colW - 6);
+      const rawStep = n >= 3 ? 11.2 : 12.4;
+      const step = Math.min(rawStep, availH / Math.max(1, n));
+      const heightClampSize = Math.max(6.4, Math.min(baseSize, step * 0.88));
+      const startY = centerY - ((n - 1) * step) / 2;
+
+      items.forEach((it, idx) => {
+        const y = startY + idx * step;
+        const reqBase = it.isSub ? Math.min(8.8, heightClampSize * 0.92) : heightClampSize;
+        const scaledBase = this.scaleRoleFontSize(data, "roster", reqBase);
+        const fSize = this._fitSingleLineFontSize(it.text, scaledBase, maxColW, 6.2);
+        const fill = it.isSub ? "#334155" : "#000000";
+        elements.push(`
+          <text class="font-f1 font-roster" x="${centerX}" y="${y.toFixed(2)}" font-size="${fSize}" fill="${fill}" text-anchor="middle" dominant-baseline="central">${this.escapeXml(it.text)}</text>
+        `);
+      });
+    };
+
+    // 2. 出区列
+    if (geom.showOut && typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.resolveRosterDepotDisplay) {
+      const outDisp = BoxDiagramDataModel.resolveRosterDepotDisplay(roster, data, "out");
+      const outItems = outDisp.lines.map(txt => ({ text: txt, isSub: false }));
+      renderStackedLines(outItems, geom.outColCenterX, geom.outColW, outItems.length >= 3 ? 8.8 : 9.6);
+    }
+
+    // 3. 入区列 (+ optional underInDepot 距離)
+    if (geom.showIn && typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.resolveRosterDepotDisplay) {
+      const inDisp = BoxDiagramDataModel.resolveRosterDepotDisplay(roster, data, "in");
+      const inItems = inDisp.lines.map(txt => ({ text: txt, isSub: false }));
+      if (distMode === "underInDepot") {
+        const dl = calcDistLabel();
+        if (dl && dl !== "-") {
+          inItems.push({ text: dl, isSub: true });
+        }
+      }
+      renderStackedLines(inItems, geom.inColCenterX, geom.inColW, inItems.length >= 3 ? 8.8 : 9.6);
+    }
+
+    // 4. 走行距離専用列
+    if (geom.showDistCol) {
+      const dl = calcDistLabel() || "-";
+      const scaledDistSize = this.scaleRoleFontSize(data, "roster", 10.4);
+      const fitDistSize = this._fitSingleLineFontSize(dl, scaledDistSize, Math.max(16, geom.distColW - 6), 6.5);
+      elements.push(`
+        <text class="font-f1 font-roster" x="${geom.distColCenterX}" y="${centerY.toFixed(2)}" font-size="${fitDistSize}" fill="#000000" text-anchor="middle" dominant-baseline="central">${this.escapeXml(dl)}</text>
+      `);
+    }
+  }
+
   /**
    * 外枠縦線・注記・フッター・SVG全体の組み立て共通ヘルパー
    */
@@ -386,31 +804,47 @@ class BoxDiagramRenderer {
     const showTitle = set.showHeaderTitle !== false;
     const showCopy = set.showHeaderCopyright !== false;
     const colHeaderText = typeof set.rosterColHeaderText === "string" ? set.rosterColHeaderText : "運用番号";
+    const outColHeaderText = typeof set.depotOutColHeaderText === "string" ? set.depotOutColHeaderText : "出区";
+    const inColHeaderText = typeof set.depotInColHeaderText === "string" ? set.depotInColHeaderText : "入区";
+    const distColHeaderText = typeof set.distanceColHeaderText === "string" ? set.distanceColHeaderText : "走行距離";
+    const headerFontSize = this.scaleRoleFontSize(data, "header", 13.28);
+    const rosterHdrSize = this._fitSingleLineFontSize(colHeaderText, headerFontSize, Math.max(20, geom.rosterColW - 10), 8.0);
+    const outHdrSize = geom.showOut ? this._fitSingleLineFontSize(outColHeaderText, headerFontSize, Math.max(18, geom.outColW - 8), 7.5) : 0;
+    const inHdrSize = geom.showIn ? this._fitSingleLineFontSize(inColHeaderText, headerFontSize, Math.max(18, geom.inColW - 8), 7.5) : 0;
+    const distHdrSize = geom.showDistCol ? this._fitSingleLineFontSize(distColHeaderText, headerFontSize, Math.max(18, geom.distColW - 8), 7.5) : 0;
 
     const headerChrome = `
-      ${(showTitle && titleText) ? `<text class="font-f1 font-header" x="${titleLeftX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>` : ""}
-      ${(showCopy && copyText) ? `<text class="font-f1 font-header" x="${copyRightX}" y="43.20" font-size="13.28" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>` : ""}
+      ${(showTitle && titleText) ? `<text class="font-f1 font-header" x="${titleLeftX}" y="43.20" font-size="${headerFontSize}" fill="#000000" text-anchor="start">${this.escapeXml(titleText)}</text>` : ""}
+      ${(showCopy && copyText) ? `<text class="font-f1 font-header" x="${copyRightX}" y="43.20" font-size="${headerFontSize}" fill="#000000" text-anchor="end">${this.escapeXml(copyText)}</text>` : ""}
       <!-- ヘッダー上枠線 -->
       <rect x="${tableLeft}" y="${headerTop}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
       <!-- ヘッダー下枠線 -->
       <rect x="${tableLeft}" y="${geom.headerBottom}" width="${(tableRight + borderWidth - tableLeft).toFixed(2)}" height="${borderWidth}" fill="#000000" />
-      <text class="font-f1 font-header" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="13.28" fill="#000000" text-anchor="start">${this.escapeXml(colHeaderText)}</text>
+      <text class="font-f1 font-header" x="${(tableLeft + 8.48).toFixed(2)}" y="79.84" font-size="${rosterHdrSize}" fill="#000000" text-anchor="start">${this.escapeXml(colHeaderText)}</text>
+      ${geom.showOut && outColHeaderText ? `<text class="font-f1 font-header" x="${geom.outColCenterX}" y="79.84" font-size="${outHdrSize}" fill="#000000" text-anchor="middle">${this.escapeXml(outColHeaderText)}</text>` : ""}
+      ${geom.showIn && inColHeaderText ? `<text class="font-f1 font-header" x="${geom.inColCenterX}" y="79.84" font-size="${inHdrSize}" fill="#000000" text-anchor="middle">${this.escapeXml(inColHeaderText)}</text>` : ""}
+      ${geom.showDistCol && distColHeaderText ? `<text class="font-f1 font-header" x="${geom.distColCenterX}" y="79.84" font-size="${distHdrSize}" fill="#000000" text-anchor="middle">${this.escapeXml(distColHeaderText)}</text>` : ""}
     `;
 
     // 左右の外枠縦線 (表全体の高さをカバー)
     const tableTotalH = prevBlockBorderBottom - headerTop;
+    const colDividerTop = (headerTop + borderWidth).toFixed(2);
+    const colDividerH = (tableTotalH - borderWidth).toFixed(2);
     elements.push(`
       <!-- 左外枠線 -->
       <rect x="${tableLeft}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
       <!-- 運用番号列境界線 -->
-      <rect x="${tableInnerX}" y="${(headerTop + borderWidth).toFixed(2)}" width="${borderWidth}" height="${(tableTotalH - borderWidth).toFixed(2)}" fill="#000000" />
+      <rect x="${tableInnerX}" y="${colDividerTop}" width="${borderWidth}" height="${colDividerH}" fill="#000000" />
+      ${geom.showOut ? `<!-- 出区列右境界線 -->\n      <rect x="${geom.outColRight}" y="${colDividerTop}" width="${borderWidth}" height="${colDividerH}" fill="#000000" />` : ""}
+      ${geom.showIn ? `<!-- 入区列左境界線 -->\n      <rect x="${(geom.inColLeft - borderWidth).toFixed(2)}" y="${colDividerTop}" width="${borderWidth}" height="${colDividerH}" fill="#000000" />` : ""}
+      ${geom.showDistCol ? `<!-- 走行距離列左境界線 -->\n      <rect x="${(geom.distColLeft - borderWidth).toFixed(2)}" y="${colDividerTop}" width="${borderWidth}" height="${colDividerH}" fill="#000000" />` : ""}
       <!-- 右外枠線 -->
       <rect x="${tableRight}" y="${headerTop}" width="${borderWidth}" height="${tableTotalH.toFixed(2)}" fill="#000000" />
     `);
 
-    const resolveFontCss = (fontId, fallback = "F1") => {
+    const resolveFontCss = (fontId, fallback = "F1", customFamily = "") => {
       if (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.resolveFontCss) {
-        return BoxDiagramDataModel.resolveFontCss(fontId, fallback);
+        return BoxDiagramDataModel.resolveFontCss(fontId, fallback, customFamily);
       }
       return '"MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif';
     };
@@ -437,10 +871,17 @@ class BoxDiagramRenderer {
         const noteColor = n.color || "#FF0000";
         const noteSize = Number.isFinite(n.fontSize) ? n.fontSize : 10.72;
         const noteFontId = normalizeFontId(n.font, "F1");
+        const noteAttrs = [];
+        if (n.bold) noteAttrs.push(`font-weight="700"`);
+        if (n.italic) noteAttrs.push(`font-style="italic"`);
+        if (n.underline) noteAttrs.push(`text-decoration="underline"`);
+        if (typeof n.letterSpacing === "number" && Number.isFinite(n.letterSpacing) && n.letterSpacing !== 0) {
+          noteAttrs.push(`letter-spacing="${n.letterSpacing}px"`);
+        }
 
         elements.push(`
           <g class="diagram-note" data-note-id="${this.escapeXml(n.id)}" transform="translate(${noteX.toFixed(2)}, ${noteY.toFixed(2)})" style="cursor: move;">
-            <text class="font-f1 font-preset-${this.escapeXml(noteFontId)}" x="0" y="0" font-size="${noteSize}" fill="${noteColor}">${this.escapeXml(n.text)}</text>
+            <text class="font-f1 font-preset-${this.escapeXml(noteFontId)}" x="0" y="0" font-size="${noteSize}" fill="${noteColor}" ${noteAttrs.join(" ")}>${this.escapeXml(n.text)}</text>
           </g>
         `);
       }
@@ -449,9 +890,10 @@ class BoxDiagramRenderer {
     // フッター・ヘッダーページ番号（設定により有無・書式・位置を切替）
     const pageNumEnabled = set.pageNumberEnabled !== false;
     const hideSinglePageNum = !!set.pageNumberHideSingle;
-    if (pageNumEnabled && !(hideSinglePageNum && totalPages <= 1)) {
+    const pageNumShown = pageNumEnabled && !(hideSinglePageNum && totalPages <= 1);
+    const pnPos = set.pageNumberPosition || "bottom-center";
+    if (pageNumShown) {
       const pnFmt = set.pageNumberFormat || "slash";
-      const pnPos = set.pageNumberPosition || "bottom-center";
       const pnText = this.formatPageNumberText(pageIndex, totalPages, pnFmt);
       let pnX = footerX;
       let pnY = footerY;
@@ -468,19 +910,38 @@ class BoxDiagramRenderer {
         pnAnchor = "middle";
       }
       elements.push(`
-        <text class="font-f1 font-header diagram-page-number" x="${pnX}" y="${pnY}" font-size="13.28" fill="#000000" text-anchor="${pnAnchor}">${this.escapeXml(pnText)}</text>
+        <text class="font-f1 font-header diagram-page-number" x="${pnX}" y="${pnY}" font-size="${headerFontSize}" fill="#000000" text-anchor="${pnAnchor}">${this.escapeXml(pnText)}</text>
       `);
     }
 
+    // Web公開版向けの控えめなフッタークレジット常時表示（例外なく各ページ下部端に出力、右下ページ番号時のみ左下へ退避）
+    const footerCreditText = "sekitan66325.github.io/box-diagram で作成";
+    const activePnPos = pageNumShown ? pnPos : "none";
+    const useBottomLeft = activePnPos === "bottom-right";
+    const creditX = useBottomLeft ? titleLeftX : copyRightX;
+    const creditAnchor = useBottomLeft ? "start" : "end";
+    const baseCreditSize = geom.isCompact ? 8.4 : 9.4;
+    const availCreditW = Math.max(70, (copyRightX - titleLeftX) * (activePnPos === "bottom-center" ? 0.40 : 0.65));
+    const creditSize = this._fitSingleLineFontSize(footerCreditText, baseCreditSize, availCreditW, 6.8);
+    elements.push(`
+      <text class="font-f1 diagram-footer-credit" x="${creditX}" y="${footerY}" font-size="${creditSize}" fill="#94a3b8" text-anchor="${creditAnchor}">${this.escapeXml(footerCreditText)}</text>
+    `);
+
     const rawFonts = (data && data.settings && data.settings.fonts) || {};
-    const fontHeaderCss = resolveFontCss(rawFonts.header, "F1");
-    const fontStationCss = resolveFontCss(rawFonts.station, "F1");
+    const stHeader = this.getRoleFontStyle(data, "header");
+    const stStation = this.getRoleFontStyle(data, "station");
+    const stRoster = this.getRoleFontStyle(data, "roster");
+    const stTrainNo = this.getRoleFontStyle(data, "trainNo");
+    const stTime = this.getRoleFontStyle(data, "time");
+
+    const fontHeaderCss = resolveFontCss(rawFonts.header, "F1", stHeader.customFamily);
+    const fontStationCss = resolveFontCss(rawFonts.station, "F1", stStation.customFamily);
     const fontSubStationCss = (rawFonts.station && rawFonts.station !== "F1")
       ? fontStationCss
       : resolveFontCss("F3", "F3");
-    const fontRosterCss = resolveFontCss(rawFonts.roster, "F1");
-    const fontTrainNoCss = resolveFontCss(rawFonts.trainNo, "F1");
-    const fontTimeCss = resolveFontCss(rawFonts.time, "F2");
+    const fontRosterCss = resolveFontCss(rawFonts.roster, "F1", stRoster.customFamily);
+    const fontTrainNoCss = resolveFontCss(rawFonts.trainNo, "F1", stTrainNo.customFamily);
+    const fontTimeCss = resolveFontCss(rawFonts.time, "F2", stTime.customFamily);
 
     const presetMap = (typeof BoxDiagramDataModel !== "undefined" && BoxDiagramDataModel.FONT_PRESETS)
       ? BoxDiagramDataModel.FONT_PRESETS
@@ -500,18 +961,19 @@ class BoxDiagramRenderer {
             .font-f1 { font-family: "MS PGothic", "ＭＳ Ｐゴシック", "MS UI Gothic", sans-serif; }
             .font-f2 { font-family: "MS Mincho", "ＭＳ 明朝", serif; }
             .font-f3 { font-family: "MS Gothic", "ＭＳ ゴシック", monospace; }
-            .font-header { font-family: ${fontHeaderCss}; }
-            .font-station { font-family: ${fontStationCss}; }
-            .font-substation { font-family: ${fontSubStationCss}; }
-            .font-roster { font-family: ${fontRosterCss}; }
-            .font-trainno { font-family: ${fontTrainNoCss}; }
-            .font-time { font-family: ${fontTimeCss}; }
+            ${this.buildRoleFontCss("font-header", fontHeaderCss, stHeader)}
+            ${this.buildRoleFontCss("font-station", fontStationCss, stStation)}
+            ${this.buildRoleFontCss("font-substation", fontSubStationCss, stStation)}
+            ${this.buildRoleFontCss("font-roster", fontRosterCss, stRoster)}
+            ${this.buildRoleFontCss("font-trainno", fontTrainNoCss, stTrainNo)}
+            ${this.buildRoleFontCss("font-time", fontTimeCss, stTime, 0.18)}
             ${presetRules}
             .train-line-group { cursor: pointer; }
             .train-line-group line { transition: stroke-width 0.14s ease, opacity 0.14s ease; }
             .train-line-group:hover line { stroke-width: 2.3px; }
             .diagram-note:hover text { text-decoration: underline; }
             .diagram-empty-hint { pointer-events: none; }
+            .diagram-footer-credit { font-family: ${fontHeaderCss}; font-weight: 400; font-style: normal; text-decoration: none; letter-spacing: 0; }
             @media print { .diagram-empty-hint { display: none; } .train-line-group line { transition: none; } }
           </style>
         </defs>
@@ -557,12 +1019,14 @@ class BoxDiagramRenderer {
     let elements = [];
 
     // 駅名ヘッダー描画 (縦書き vs 横書き)
+    const stHorizSize = this.scaleRoleFontSize(data, "station", 13.28);
+    const stVertShortSize = this.scaleRoleFontSize(data, "station", 14.72);
     for (const st of visibleStations) {
       const stX = this.mapStationXToCanvas(st.x, geom);
       const name = st.name || "";
       if (stationHeaderDir === "horizontal") {
         elements.push(`
-          <text class="font-f1 font-station" x="${stX}" y="78.00" font-size="13.28" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
+          <text class="font-f1 font-station" x="${stX}" y="78.00" font-size="${stHorizSize}" fill="#000000" text-anchor="middle">${this.escapeXml(name)}</text>
         `);
       } else {
         // 縦書きモード
@@ -571,12 +1035,12 @@ class BoxDiagramRenderer {
           const char2 = name.length > 1 ? name[1] : "";
           if (name.length === 1) {
             elements.push(`
-              <text class="font-f1 font-station" x="${stX}" y="79.68" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="79.68" font-size="${stVertShortSize}" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
             `);
           } else {
             elements.push(`
-              <text class="font-f1 font-station" x="${stX}" y="71.52" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
-              <text class="font-f1 font-station" x="${stX}" y="87.84" font-size="14.72" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="71.52" font-size="${stVertShortSize}" fill="#000000" text-anchor="middle">${this.escapeXml(char1)}</text>
+              <text class="font-f1 font-station" x="${stX}" y="87.84" font-size="${stVertShortSize}" fill="#000000" text-anchor="middle">${this.escapeXml(char2)}</text>
             `);
           }
         } else {
@@ -588,13 +1052,14 @@ class BoxDiagramRenderer {
           const boxCenterY = (innerTop + innerBottom) / 2;
           const edgePad = Math.max(2.5, Math.min(4.6, 13.5 / len));
           const fSize = Math.min(12.2, Math.max(6.8, (innerH - 2 * edgePad) / (len * 1.12)));
+          const stVertCharSize = this.scaleRoleFontSize(data, "station", fSize);
           const spanCenters = Math.max(0, innerH - 2 * edgePad - fSize);
           const startCenterY = boxCenterY - spanCenters / 2;
           const stepY = spanCenters / (len - 1);
           for (let ci = 0; ci < len; ci++) {
             const chY = startCenterY + ci * stepY;
             elements.push(`
-              <text class="font-f1 font-station" x="${stX}" y="${chY.toFixed(2)}" font-size="${fSize.toFixed(1)}" fill="#000000" text-anchor="middle" dominant-baseline="central">${this.escapeXml(name[ci])}</text>
+              <text class="font-f1 font-station" x="${stX}" y="${chY.toFixed(2)}" font-size="${stVertCharSize.toFixed(1)}" fill="#000000" text-anchor="middle" dominant-baseline="central">${this.escapeXml(name[ci])}</text>
             `);
           }
         }
@@ -605,30 +1070,34 @@ class BoxDiagramRenderer {
     let prevBlockBorderTop = null;
     let prevBlockBorderBottom = headerBottom + borderWidth; // 101.28
 
-    const subHeaderLineX = tableInnerX + borderWidth;
-    const subHeaderLineW = tableRight - subHeaderLineX;
+    const subHeaderLineX = geom.plotContainerLeft;
+    const subHeaderLineW = geom.plotContainerRight - geom.plotContainerLeft;
     const blockBorderX = tableLeft + borderWidth;
     const blockBorderW = tableRight + borderWidth - blockBorderX;
-    const labelOffsetScale = geom.canvasScale < 0.9 ? geom.canvasScale : 1.0;
+    const spanRatio = Math.max(0.45, Math.min(1.0, (geom.stationPlotRight - geom.stationPlotLeft) / 787.20));
+    const labelOffsetScale = geom.isExactClassicA4B5Portrait
+      ? 1.0
+      : Math.min(geom.canvasScale < 0.9 ? geom.canvasScale : 1.0, spanRatio);
+    const vScale = geom.vScale || 1.0;
 
     for (let rIdx = 0; rIdx < pageRosters.length; rIdx++) {
       const roster = pageRosters[rIdx];
       const isFirstOnPage = (rIdx === 0);
       const showSubHeader = subHeaderMode === "all" || (!isFirstOnPage && subHeaderMode !== "none");
-      const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+      const scale = (typeof roster.rowScale === "number" ? roster.rowScale : 1.0) * vScale;
 
       let subHeaderLineY = null;
       let firstTrainY = 0;
 
       if (isFirstOnPage) {
-        firstTrainY = headerBottom + P * R + delta; // 98.72 + 2 * 12.96 + 0.64 = 125.28
+        firstTrainY = headerBottom + P * R * scale + delta; // 標準時: 125.28
       } else {
         const refBorderTop = (prevBlockBorderTop !== null) ? prevBlockBorderTop : headerBottom;
         if (showSubHeader) {
           subHeaderLineY = refBorderTop + 1 * R + delta; // 267.20 + 13.60 = 280.80
-          firstTrainY = subHeaderLineY + P * R; // 280.80 + 25.92 = 306.72
+          firstTrainY = subHeaderLineY + P * R * scale; // 標準時: 306.72
         } else {
-          firstTrainY = prevBlockBorderBottom + P * R;
+          firstTrainY = prevBlockBorderBottom + P * R * scale;
         }
       }
 
@@ -644,7 +1113,7 @@ class BoxDiagramRenderer {
           // テキスト基準線は線の上 1.76px
           const textY = subHeaderLineY - 1.76;
           elements.push(`
-            <text class="font-f3 font-substation" x="${stX}" y="${textY.toFixed(2)}" font-size="10.72" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
+            <text class="font-f3 font-substation" x="${stX}" y="${textY.toFixed(2)}" font-size="${this.scaleRoleFontSize(data, "station", 10.72)}" fill="#000000" ${strokeAttr} text-anchor="middle">${this.escapeXml(abbr)}</text>
           `);
         }
 
@@ -673,9 +1142,19 @@ class BoxDiagramRenderer {
       // 運用ブロック下部太線 Y (ページ末尾は 2*R、後続ブロックがある場合は 2*R - delta)
       const isLastOnPage = (rIdx === pageRosters.length - 1);
       const bottomDelta = isLastOnPage ? 0 : delta;
-      const blockBottomBorderTop = (trainPositions.length > 0)
+      const rawBlockBottomBorderTop = (trainPositions.length > 0)
         ? trainLineY + P * R * scale - bottomDelta
-        : firstTrainY + 2 * R * scale;
+        : (scale === 1.0 ? firstTrainY + 2 * R * scale : prevBlockBorderBottom + Math.max(24.0, 40.0 * scale));
+      const minSideH = this.getMinSideColumnBlockContentHeight(data, roster);
+      const rawCellH = rawBlockBottomBorderTop - prevBlockBorderBottom;
+      let blockBottomBorderTop = rawBlockBottomBorderTop;
+      if (minSideH > rawCellH) {
+        const extraY = minSideH - rawCellH;
+        trainPositions.forEach(tp => {
+          tp.y += extraY / 2;
+        });
+        blockBottomBorderTop = rawBlockBottomBorderTop + extraY;
+      }
       const blockBottomBorderBottom = blockBottomBorderTop + borderWidth;
 
       // 運用ブロックゼブラ背景 & 駅縦ガイド線（列車線より下層）
@@ -702,12 +1181,8 @@ class BoxDiagramRenderer {
         }
       }
 
-      // 運用番号（左列の中央に配置）
-      // Y座標: (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32
-      const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
-      elements.push(`
-        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
-      `);
+      // 運用番号・出区・入区・走行距離サイド列描画
+      this.renderRosterSideColumns(elements, data, roster, geom, prevBlockBorderBottom, blockBottomBorderTop);
       if (this.options.interactive && rIdx === 0 && pageRosters.every(r => (r.trains || []).length === 0)) {
         this.appendEmptyRosterHint(elements, geom.stationPlotLeft, geom.stationPlotRight, prevBlockBorderBottom, blockBottomBorderTop);
       }
@@ -800,16 +1275,18 @@ class BoxDiagramRenderer {
 
         const dispDepTime = this.formatTrainTime(tr.depTime, settings);
         const dispArrTime = this.formatTrainTime(tr.arrTime, settings);
+        const timeFontSize = this.scaleRoleFontSize(data, "time", 10.72);
+        const trainNoFontSize = this.scaleRoleFontSize(data, "trainNo", 10.72);
 
         if (dispDepTime) {
           elements.push(`
-            <text class="font-f2 font-time" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(dispDepTime)}</text>
+            <text class="font-f2 font-time" x="${fromX.toFixed(2)}" y="${depY.toFixed(2)}" font-size="${timeFontSize}" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" text-anchor="middle">${this.escapeXml(dispDepTime)}</text>
           `);
         }
 
         if (dispArrTime) {
           elements.push(`
-            <text class="font-f2 font-time" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="10.72" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" letter-spacing="0.18px" text-anchor="middle">${this.escapeXml(dispArrTime)}</text>
+            <text class="font-f2 font-time" x="${toX.toFixed(2)}" y="${arrY.toFixed(2)}" font-size="${timeFontSize}" fill="${timeColor}" stroke="${timeColor}" stroke-width="0.107" text-anchor="middle">${this.escapeXml(dispArrTime)}</text>
           `);
         }
 
@@ -825,12 +1302,12 @@ class BoxDiagramRenderer {
         if (isDown) {
           const labelX = fromX + 80.80 * labelOffsetScale;
           elements.push(`
-            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="start">${labelHtml}</text>
+            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="${trainNoFontSize}" text-anchor="start">${labelHtml}</text>
           `);
         } else {
           const labelX = fromX - 84.00 * labelOffsetScale;
           elements.push(`
-            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="10.72" text-anchor="end">${labelHtml}</text>
+            <text class="font-f1 font-trainno" x="${labelX.toFixed(2)}" y="${labelBaselineY.toFixed(2)}" font-size="${trainNoFontSize}" text-anchor="end">${labelHtml}</text>
           `);
         }
 
@@ -1176,7 +1653,8 @@ class BoxDiagramRenderer {
   calculateTimeAxisRosterBlockHeight(data, roster, isFirstOnPage) {
     const settings = data.settings || {};
     const R = typeof settings.baseRowHeight === "number" ? settings.baseRowHeight : 12.96;
-    const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+    const vScale = this.getScaleSetting(settings, "tableVerticalScale", 1.0, 0.5, 1.8);
+    const scale = (typeof roster.rowScale === "number" ? roster.rowScale : 1.0) * vScale;
     const subHeaderMode = settings.subHeaderMode || "omitFirst";
     const borderWidth = 2.56;
     const subLineWidth = 1.28;
@@ -1193,12 +1671,19 @@ class BoxDiagramRenderer {
       h += 1 * R + delta;
     }
 
-    const topPad = Math.max(25.0, 2.05 * R * scale);
-    const lanePitch = Math.max(54.0, 4.4 * R * scale);
-    const bottomPad = Math.max(32.5, 2.55 * R * scale);
+    const floorScale = Math.min(1.0, Math.max(0.68, scale));
+    const topPad = Math.max(25.0 * floorScale, 2.05 * R * scale);
+    const lanePitch = Math.max(54.0 * floorScale, 4.4 * R * scale);
+    const bottomPad = Math.max(32.5 * floorScale, 2.55 * R * scale);
 
-    h += topPad + (laneCount - 1) * lanePitch + bottomPad + borderWidth;
-    return h;
+    h += topPad + (laneCount - 1) * lanePitch + bottomPad;
+
+    const minSideH = this.getMinSideColumnBlockContentHeight(data, roster);
+    if (minSideH > h) {
+      h = minSideH;
+    }
+
+    return h + borderWidth;
   }
 
   _canPlaceHorizontalSpan(intervals, left, right, margin = 3.0) {
@@ -1245,7 +1730,8 @@ class BoxDiagramRenderer {
 
     // 1. ヘッダー時間目盛り描画
     const hourStep = pxPerHour < 28 ? 2 : 1;
-    const tickFontSize = lateFmt === "yoku" && pxPerHour < 48 ? 10.5 : (pxPerHour < 42 ? 11.2 : 12.8);
+    const baseTickFontSize = lateFmt === "yoku" && pxPerHour < 48 ? 10.5 : (pxPerHour < 42 ? 11.2 : 12.8);
+    const tickFontSize = this.scaleRoleFontSize(data, "station", baseTickFontSize);
 
     for (let h = timeRange.startHour; h <= timeRange.endHour; h++) {
       const hx = timeToX(h * 60);
@@ -1270,16 +1756,17 @@ class BoxDiagramRenderer {
     let prevBlockBorderTop = null;
     let prevBlockBorderBottom = headerBottom + borderWidth;
 
-    const subHeaderLineX = tableInnerX + borderWidth;
-    const subHeaderLineW = tableRight - subHeaderLineX;
+    const subHeaderLineX = geom.plotContainerLeft;
+    const subHeaderLineW = geom.plotContainerRight - geom.plotContainerLeft;
     const blockBorderX = tableLeft + borderWidth;
     const blockBorderW = tableRight + borderWidth - blockBorderX;
+    const vScale = geom.vScale || 1.0;
 
     for (let rIdx = 0; rIdx < pageRosters.length; rIdx++) {
       const roster = pageRosters[rIdx];
       const isFirstOnPage = (rIdx === 0);
       const showSubHeader = !isFirstOnPage && subHeaderMode === "all";
-      const scale = typeof roster.rowScale === "number" ? roster.rowScale : 1.0;
+      const scale = (typeof roster.rowScale === "number" ? roster.rowScale : 1.0) * vScale;
 
       const lanes = this.buildTimeAxisLanes(roster, timeRange.dayStartMin);
       if (lanes.length > 1 && diagAcc) diagAcc.multiLaneRosterCount++;
@@ -1295,7 +1782,7 @@ class BoxDiagramRenderer {
           const hx = timeToX(h * 60);
           const lbl = this.formatHourTickLabel(h, lateFmt);
           elements.push(`
-            <text class="font-f3 font-substation" x="${hx}" y="${(subHeaderLineY - 1.76).toFixed(2)}" font-size="9.6" fill="#334155" text-anchor="middle">${this.escapeXml(lbl)}</text>
+            <text class="font-f3 font-substation" x="${hx}" y="${(subHeaderLineY - 1.76).toFixed(2)}" font-size="${this.scaleRoleFontSize(data, "station", 9.6)}" fill="#334155" text-anchor="middle">${this.escapeXml(lbl)}</text>
           `);
         }
         elements.push(`
@@ -1304,13 +1791,21 @@ class BoxDiagramRenderer {
         blockTop = subHeaderLineY + 1.28;
       }
 
-      const topPad = Math.max(25.0, 2.05 * R * scale);
-      const lanePitch = Math.max(54.0, 4.4 * R * scale);
-      const bottomPad = Math.max(32.5, 2.55 * R * scale);
+      const floorScale = Math.min(1.0, Math.max(0.68, scale));
+      const topPad = Math.max(25.0 * floorScale, 2.05 * R * scale);
+      const lanePitch = Math.max(54.0 * floorScale, 4.4 * R * scale);
+      const bottomPad = Math.max(32.5 * floorScale, 2.55 * R * scale);
 
-      const firstLaneY = blockTop + topPad;
+      let firstLaneY = blockTop + topPad;
       const lastLaneY = firstLaneY + (Math.max(1, lanes.length) - 1) * lanePitch;
-      const blockBottomBorderTop = round2(lastLaneY + bottomPad);
+      let blockBottomBorderTop = round2(lastLaneY + bottomPad);
+      const minSideH = this.getMinSideColumnBlockContentHeight(data, roster);
+      const rawCellH = blockBottomBorderTop - prevBlockBorderBottom;
+      if (minSideH > rawCellH) {
+        const extraY = minSideH - rawCellH;
+        firstLaneY += extraY / 2;
+        blockBottomBorderTop = round2(blockBottomBorderTop + extraY);
+      }
       const blockBottomBorderBottom = round2(blockBottomBorderTop + borderWidth);
 
       // 背景ゼブラ & 時間軸グリッド（列車線の下層）
@@ -1342,11 +1837,8 @@ class BoxDiagramRenderer {
         }
       }
 
-      // 運用番号（左列中央）
-      const rosterCenterY = (prevBlockBorderBottom + blockBottomBorderTop) / 2 + 6.32;
-      elements.push(`
-        <text class="font-f1 font-roster" x="${geom.rosterLabelX}" y="${rosterCenterY.toFixed(2)}" font-size="18.72" fill="#000000" text-anchor="middle">${this.escapeXml(roster.name || roster.id)}</text>
-      `);
+      // 運用番号・出区・入区・走行距離サイド列描画
+      this.renderRosterSideColumns(elements, data, roster, geom, prevBlockBorderBottom, blockBottomBorderTop);
       if (this.options.interactive && rIdx === 0 && pageRosters.every(r => (r.trains || []).length === 0)) {
         this.appendEmptyRosterHint(elements, timePlotLeft, timePlotRight, prevBlockBorderBottom, blockBottomBorderTop);
       }
@@ -1464,7 +1956,7 @@ class BoxDiagramRenderer {
       const plain = this._getTrainLabelPlainText(tr, roster.id);
       if (!plain) continue;
 
-      const fontSize = 10.0;
+      const fontSize = this.scaleRoleFontSize(data, "trainNo", 10.0);
       const w = this._estimateTextWidth(plain, fontSize);
       const halfW = w / 2;
       const midX = Math.max(plotLeft - 20 + halfW, Math.min(plotRight + 20 - halfW, (item.x1 + item.x2) / 2));
@@ -1536,7 +2028,7 @@ class BoxDiagramRenderer {
     const abbrPlaced = [];
     const abbrY = round2(laneY + 12.2);
     for (const tok of abbrTokens) {
-      const fSize = 10.0;
+      const fSize = this.scaleRoleFontSize(data, "station", 10.0);
       const w = this._estimateTextWidth(tok.text, fSize);
       let x = tok.x;
       if (!this._canPlaceHorizontalSpan(abbrPlaced, x - w / 2, x + w / 2, 1.5)) {
@@ -1586,7 +2078,7 @@ class BoxDiagramRenderer {
       ) {
         continue;
       }
-      const fSize = 8.8;
+      const fSize = this.scaleRoleFontSize(data, "time", 8.8);
       const w = this._estimateTextWidth(cand.text, fSize);
       const halfW = w / 2;
       let cx = Math.max(plotLeft - 24 + halfW, Math.min(plotRight + 24 - halfW, cand.x));

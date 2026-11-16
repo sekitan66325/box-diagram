@@ -34,6 +34,29 @@ document.addEventListener("DOMContentLoaded", () => {
   const btnExportJson = document.getElementById("btnExportJson");
   const inputFileOpen = document.getElementById("inputFileOpen");
   const btnPrint = document.getElementById("btnPrint");
+  const btnExportMenu = document.getElementById("btnExportMenu");
+  const btnMobileQuickExport = document.getElementById("btnMobileQuickExport");
+  const exportMenuDropdown = document.getElementById("exportMenuDropdown");
+  const btnExportPngCurrent = document.getElementById("btnExportPngCurrent");
+  const btnExportPngAll = document.getElementById("btnExportPngAll");
+  const btnExportSvg = document.getElementById("btnExportSvg");
+  const btnExportPrintHtml = document.getElementById("btnExportPrintHtml");
+  const btnToggleMobileHeaderMenu = document.getElementById("btnToggleMobileHeaderMenu");
+  const headerActionsDrawer = document.getElementById("headerActionsDrawer");
+  const btnToggleMobilePreviewTools = document.getElementById("btnToggleMobilePreviewTools");
+  const mobileInAppHintBar = document.getElementById("mobileInAppHintBar");
+  const btnDismissInAppHint = document.getElementById("btnDismissInAppHint");
+
+  const trackAnalytics = (name, params = {}) => {
+    if (window.BoxAnalytics && typeof window.BoxAnalytics.track === "function") {
+      window.BoxAnalytics.track(name, params);
+    }
+  };
+  const setAnalyticsContext = (ctx) => {
+    if (window.BoxAnalytics && typeof window.BoxAnalytics.setNextActionContext === "function") {
+      window.BoxAnalytics.setNextActionContext(ctx);
+    }
+  };
 
   const mobileWorkspaceNav = document.getElementById("mobileWorkspaceNav");
   const splitter = document.getElementById("workspaceSplitter");
@@ -61,8 +84,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const dynamicPrintStyle = document.getElementById("dynamic-print-style");
 
   // モバイル表示切替 ("preview" | "editor") — 既定はプレビュー優先
-  function setMobileView(view) {
+  function setMobileView(view, fromUser = false) {
     const next = view === "editor" ? "editor" : "preview";
+    const prev = document.body.dataset.mobileView;
     document.body.dataset.mobileView = next;
     if (mobileWorkspaceNav) {
       mobileWorkspaceNav.querySelectorAll("[data-mobile-view]").forEach(btn => {
@@ -71,17 +95,203 @@ document.addEventListener("DOMContentLoaded", () => {
         btn.setAttribute("aria-pressed", String(active));
       });
     }
+    if (fromUser && prev !== next) {
+      trackAnalytics("mobile_view_switched", { view: next });
+    }
     if (next === "preview") {
       requestAnimationFrame(() => renderPreview());
     }
   }
-  setMobileView("preview");
+  setMobileView("preview", false);
   if (mobileWorkspaceNav) {
     mobileWorkspaceNav.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-mobile-view]");
       if (!btn) return;
-      setMobileView(btn.dataset.mobileView);
+      setMobileView(btn.dataset.mobileView, true);
     });
+  }
+
+  function setMobileHeaderMenuOpen(open) {
+    const isOpen = !!open;
+    if (isOpen) {
+      document.body.dataset.mobileMenu = "open";
+    } else {
+      delete document.body.dataset.mobileMenu;
+    }
+    if (btnToggleMobileHeaderMenu) {
+      btnToggleMobileHeaderMenu.setAttribute("aria-expanded", String(isOpen));
+      btnToggleMobileHeaderMenu.textContent = isOpen ? "閉じる ▴" : "メニュー ▾";
+    }
+  }
+
+  function setMobilePreviewToolsOpen(open) {
+    const isOpen = !!open;
+    if (isOpen) {
+      document.body.dataset.mobilePreviewTools = "open";
+    } else {
+      delete document.body.dataset.mobilePreviewTools;
+    }
+    if (btnToggleMobilePreviewTools) {
+      btnToggleMobilePreviewTools.setAttribute("aria-expanded", String(isOpen));
+      btnToggleMobilePreviewTools.textContent = isOpen ? "詳細 ▴" : "表示設定 ▾";
+    }
+    requestAnimationFrame(() => renderPreview());
+  }
+
+  if (btnToggleMobileHeaderMenu) {
+    btnToggleMobileHeaderMenu.addEventListener("click", () => {
+      const next = document.body.dataset.mobileMenu !== "open";
+      setMobileHeaderMenuOpen(next);
+      trackAnalytics("mobile_menu_toggled", { open: next });
+    });
+  }
+
+  if (btnToggleMobilePreviewTools) {
+    btnToggleMobilePreviewTools.addEventListener("click", () => {
+      const next = document.body.dataset.mobilePreviewTools !== "open";
+      setMobilePreviewToolsOpen(next);
+      trackAnalytics("mobile_preview_tools_toggled", { open: next });
+    });
+  }
+
+  // ローカル下書き自動保存・自動復元（localStorage + 大容量時のIndexedDBフォールバック）
+  const DRAFT_STORAGE_KEY = "hakodiagram_draft_v1";
+  const DRAFT_IDB_NAME = "hakodiagram_draft_db";
+  const DRAFT_IDB_STORE = "drafts";
+  let hasDirtyDraft = false;
+  let draftSaveTimer = null;
+  let currentSourceMode = "sample";
+  let currentSourceLabel = "sakuragawa_main";
+
+  function openDraftIdb() {
+    return new Promise((resolve, reject) => {
+      if (typeof indexedDB === "undefined") {
+        reject(new Error("IndexedDB unavailable"));
+        return;
+      }
+      const req = indexedDB.open(DRAFT_IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(DRAFT_IDB_STORE)) {
+          db.createObjectStore(DRAFT_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("IDB open failed"));
+    });
+  }
+
+  async function saveDraftToIdb(payload) {
+    const db = await openDraftIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DRAFT_IDB_STORE, "readwrite");
+      tx.objectStore(DRAFT_IDB_STORE).put(payload, DRAFT_STORAGE_KEY);
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => { db.close(); reject(tx.error); };
+    });
+  }
+
+  async function loadDraftFromIdb() {
+    const db = await openDraftIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(DRAFT_IDB_STORE, "readonly");
+      const req = tx.objectStore(DRAFT_IDB_STORE).get(DRAFT_STORAGE_KEY);
+      req.onsuccess = () => { db.close(); resolve(req.result || null); };
+      req.onerror = () => { db.close(); reject(req.error); };
+    });
+  }
+
+  async function clearIdbDraft() {
+    try {
+      const db = await openDraftIdb();
+      const tx = db.transaction(DRAFT_IDB_STORE, "readwrite");
+      tx.objectStore(DRAFT_IDB_STORE).delete(DRAFT_STORAGE_KEY);
+      tx.oncomplete = () => db.close();
+    } catch (_) { /* ignore */ }
+  }
+
+  function clearSavedDraft() {
+    if (draftSaveTimer) {
+      clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+    }
+    hasDirtyDraft = false;
+    try {
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
+    } catch (_) { /* ignore */ }
+    clearIdbDraft();
+  }
+
+  function formatDraftSourceLabel(data, mode, label) {
+    const isPresetId = label === "sakuragawa_main" || label === "midorikawa_compact";
+    if (mode === "custom" && label && !isPresetId) {
+      return label;
+    }
+    const rawTitle = data && data.metadata && data.metadata.title ? String(data.metadata.title).trim() : "";
+    const shortTitle = rawTitle ? (rawTitle.length > 24 ? `${rawTitle.slice(0, 24)}…` : rawTitle) : "";
+    return shortTitle ? `下書き: ${shortTitle}` : "前回の作業下書き";
+  }
+
+  function buildDraftPayload() {
+    const data = dataModel.getData();
+    if (!data) return null;
+    const draftLabel = formatDraftSourceLabel(data, currentSourceMode, currentSourceLabel);
+    return {
+      version: 1,
+      savedAt: Date.now(),
+      sourceMode: "custom",
+      sourceLabel: draftLabel,
+      activeTab: tableEditor ? tableEditor.activeTab : "tab-trains",
+      activeRosterId: tableEditor ? tableEditor.activeRosterId : null,
+      data
+    };
+  }
+
+  function flushDraftSave() {
+    if (draftSaveTimer) {
+      clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+    }
+    if (!hasDirtyDraft) return;
+    const payload = buildDraftPayload();
+    if (!payload) return;
+    try {
+      const serialized = JSON.stringify(payload);
+      localStorage.setItem(DRAFT_STORAGE_KEY, serialized);
+    } catch (_) {
+      // 容量超過時はIndexedDBへ退避し、localStorageにはポインタを残す
+      try {
+        localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({
+          version: 1,
+          storage: "idb",
+          savedAt: payload.savedAt,
+          sourceMode: payload.sourceMode,
+          sourceLabel: payload.sourceLabel
+        }));
+      } catch (__) { /* ignore */ }
+      saveDraftToIdb(payload).catch(() => {});
+    }
+  }
+
+  function scheduleDraftSave() {
+    if (!hasDirtyDraft) return;
+    if (draftSaveTimer) clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(() => {
+      draftSaveTimer = null;
+      flushDraftSave();
+    }, 600);
+  }
+
+  function readSyncDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
   }
 
   // アプリ状態
@@ -116,7 +326,25 @@ document.addEventListener("DOMContentLoaded", () => {
     "pageNumberPosition",
     "pageNumberHideSingle",
     "timeDisplayFormat",
-    "stationGridStyle"
+    "stationGridStyle",
+    "showDepotOutCol",
+    "showDepotInCol",
+    "depotOutColHeaderText",
+    "depotInColHeaderText",
+    "depotDisplayScope",
+    "depotTextFormat",
+    "depotFilledPolicy",
+    "depotFallbackToEndpoints",
+    "depotOutColWidth",
+    "depotInColWidth",
+    "distanceDisplayMode",
+    "distanceColHeaderText",
+    "distanceExcludeDeadhead",
+    "distanceDecimalPlaces",
+    "distanceColWidth",
+    "tableVerticalScale",
+    "tableHorizontalScale",
+    "rosterColWidth"
   ];
 
   function applyStickyPreviewSettings(targetData, excludeKeys = []) {
@@ -134,15 +362,28 @@ document.addEventListener("DOMContentLoaded", () => {
     return cloned;
   }
 
-  // 3. データ変更リスナー（プレビューの再描画 & Undo/Redo更新）
+  // 3. データ変更リスナー（プレビューの再描画 & Undo/Redo更新 & 自動保存）
+  if (window.BoxAnalytics && typeof window.BoxAnalytics.attachModel === "function") {
+    window.BoxAnalytics.attachModel(dataModel);
+  }
+
   dataModel.subscribe((data, actionType) => {
     if (actionType === "load") {
       dismissedSuggestionKeys.clear();
     } else if (actionType === "settings-update") {
       hasStickyPreviewSettings = true;
     }
+    if (actionType !== "load") {
+      hasDirtyDraft = true;
+      scheduleDraftSave();
+    }
     updateHistoryButtons();
     renderPreview({ resetScroll: actionType === "load" });
+  });
+
+  window.addEventListener("pagehide", flushDraftSave);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushDraftSave();
   });
 
   function updateHistoryButtons() {
@@ -268,6 +509,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.textContent = act.label;
       btn.addEventListener("click", () => {
         dataModel.updateSettings(act.patch || {});
+        trackAnalytics("layout_suggestion_action", { action: "apply", suggestion_key: sug.key });
       });
       actionsEl.appendChild(btn);
     });
@@ -280,6 +522,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnDismiss.title = "この提案を閉じる";
     btnDismiss.addEventListener("click", () => {
       dismissedSuggestionKeys.add(sug.key);
+      trackAnalytics("layout_suggestion_action", { action: "dismiss", suggestion_key: sug.key });
       updateLayoutSuggestionBar(dataModel.getData(), diagramRenderer.getLastDiagnostics());
     });
     actionsEl.appendChild(btnDismiss);
@@ -447,8 +690,9 @@ document.addEventListener("DOMContentLoaded", () => {
         tableEditor.setActiveRoster(rosterId);
         tableEditor.setActiveTab("tab-trains");
         if (window.innerWidth <= 900) {
-          setMobileView("editor");
+          setMobileView("editor", false);
         }
+        trackAnalytics("diagram_train_clicked", { axis_mode: (dataModel.getSettings().xAxisMode === "time" ? "time" : "station") });
 
         // 該当行へスクロール & ハイライト
         setTimeout(() => {
@@ -614,6 +858,7 @@ document.addEventListener("DOMContentLoaded", () => {
           updateSnapGuide(null);
         }
 
+        let finalSnapInfo = null;
         function computePosition(clientX, clientY, altActive) {
           const curMouseSvg = clientToSvg(clientX, clientY);
           const dx = curMouseSvg.x - anchorMouseSvg.x;
@@ -725,6 +970,7 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           updateSnapGuide(snapInfo);
+          finalSnapInfo = snapInfo;
 
           curX = parseFloat(((snapInfo && snapInfo.isSnapped) ? snapInfo.x : rawX).toFixed(2));
           curY = parseFloat(((snapInfo && snapInfo.isSnapped) ? snapInfo.y : rawY).toFixed(2));
@@ -803,7 +1049,13 @@ document.addEventListener("DOMContentLoaded", () => {
           noteObj.x = startX;
           noteObj.y = startY;
           if (curX !== startX || curY !== startY) {
+            setAnalyticsContext({ via: "diagram_drag" });
             dataModel.updateNote(noteId, { x: curX, y: curY });
+            trackAnalytics("note_drag_completed", {
+              snapped: !!(finalSnapInfo && finalSnapInfo.isSnapped),
+              snap_align: (finalSnapInfo && finalSnapInfo.snapXAlign) || "none",
+              axis_mode: (pageGeom && pageGeom.xAxisMode === "time") ? "time" : "station"
+            });
           }
         }
 
@@ -856,6 +1108,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let isSampleMode = true;
 
   function updateDocumentSourceUI(mode, customLabel = "") {
+    currentSourceMode = mode === "sample" ? "sample" : "custom";
+    currentSourceLabel = customLabel || (currentSourceMode === "sample" ? "sakuragawa_main" : "作成中データ");
     if (mode === "sample") {
       isSampleMode = true;
       if (optPresetCustom) optPresetCustom.hidden = true;
@@ -883,29 +1137,36 @@ document.addEventListener("DOMContentLoaded", () => {
     const rawPreset = PRESET_MAP[e.target.value];
     if (!rawPreset) return;
     const prepared = applyStickyPreviewSettings(rawPreset);
+    clearSavedDraft();
     updateDocumentSourceUI("sample", e.target.value);
     dataModel.load(prepared);
     tableEditor.setActiveRoster(null);
+    setMobileHeaderMenuOpen(false);
+    trackAnalytics("preset_selected", { preset_id: e.target.value });
   });
 
   if (btnDismissWelcomeBar) {
     btnDismissWelcomeBar.addEventListener("click", () => {
       isWelcomeDismissed = true;
       if (welcomeSampleBar) welcomeSampleBar.hidden = true;
+      trackAnalytics("welcome_bar_action", { action: "dismiss" });
     });
   }
   if (btnWelcomeOpenFile && inputFileOpen) {
     btnWelcomeOpenFile.addEventListener("click", () => {
+      trackAnalytics("welcome_bar_action", { action: "open_file" });
       inputFileOpen.click();
     });
   }
 
   // Undo / Redo
   btnUndo.addEventListener("click", () => {
+    setAnalyticsContext({ action: "undo", via: "button" });
     dataModel.undo();
   });
 
   btnRedo.addEventListener("click", () => {
+    setAnalyticsContext({ action: "redo", via: "button" });
     dataModel.redo();
   });
 
@@ -913,16 +1174,19 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
       if (e.shiftKey) {
+        setAnalyticsContext({ action: "redo", via: "shortcut" });
         dataModel.redo();
       } else {
+        setAnalyticsContext({ action: "undo", via: "shortcut" });
         dataModel.undo();
       }
       e.preventDefault();
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+      setAnalyticsContext({ action: "redo", via: "shortcut" });
       dataModel.redo();
       e.preventDefault();
     } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "p") {
-      preparePrintAndTrigger();
+      preparePrintAndTrigger("shortcut");
       e.preventDefault();
     }
   });
@@ -933,6 +1197,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const blob = new Blob([jsonStr], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const meta = dataModel.getMetadata();
+    const curData = dataModel.getData();
+    const rosters = (curData && curData.rosters) || [];
+    const trainsCount = rosters.reduce((s, r) => s + ((r && r.trains) ? r.trains.length : 0), 0);
     const fileName = `${meta.title || "hakodiagram"}_${new Date().toISOString().split("T")[0]}.json`;
 
     const a = document.createElement("a");
@@ -942,7 +1209,14 @@ document.addEventListener("DOMContentLoaded", () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    setMobileHeaderMenuOpen(false);
     showAppToast("JSONファイルを保存しました");
+    trackAnalytics("json_exported", {
+      rosters_count: rosters.length,
+      trains_count: trainsCount,
+      stations_count: ((curData && curData.stations) || []).length,
+      axis_mode: (curData && curData.settings && curData.settings.xAxisMode === "time") ? "time" : "station"
+    });
   });
 
   // 統合ファイルインポート (JSON / .oud / .oud2 自動判別)
@@ -955,9 +1229,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (inputFileOpen) {
+    inputFileOpen.addEventListener("click", () => {
+      trackAnalytics("file_import_started", { source: document.body.dataset.mobileMenu === "open" ? "mobile_menu" : "header" });
+    });
     inputFileOpen.addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      setMobileHeaderMenuOpen(false);
       try {
         const lowerName = (file.name || "").toLowerCase();
         const isOudExt = lowerName.endsWith(".oud") || lowerName.endsWith(".oud2");
@@ -969,6 +1247,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const parsed = JSON.parse(text);
             const val = dataModel.validateSchema(parsed);
             if (!val.valid) {
+              trackAnalytics("json_imported", { success: false });
               alert(`インポート失敗:\n${val.errors.join("\n")}`);
               return;
             }
@@ -977,12 +1256,24 @@ document.addEventListener("DOMContentLoaded", () => {
             tableEditor.setActiveRoster(null);
             const loadedTitle = (parsed.metadata && parsed.metadata.title) ? parsed.metadata.title : file.name;
             updateDocumentSourceUI("custom", `読込: ${loadedTitle}`);
+            hasDirtyDraft = true;
+            flushDraftSave();
+            const norm = dataModel.getData();
+            const rList = (norm && norm.rosters) || [];
+            trackAnalytics("json_imported", {
+              success: true,
+              rosters_count: rList.length,
+              trains_count: rList.reduce((acc, r) => acc + ((r && r.trains) ? r.trains.length : 0), 0),
+              stations_count: ((norm && norm.stations) || []).length,
+              axis_mode: (norm && norm.settings && norm.settings.xAxisMode === "time") ? "time" : "station"
+            });
             alert(`JSONファイル「${file.name}」を読み込みました。`);
           } else {
             openOudBuffer(await file.arrayBuffer(), file.name);
           }
         }
       } catch (err) {
+        trackAnalytics("file_import_error", { error_kind: "parse_error" });
         alert(`ファイル解析エラー:\n${err.message}`);
       } finally {
         inputFileOpen.value = "";
@@ -1028,7 +1319,16 @@ document.addEventListener("DOMContentLoaded", () => {
     closeFeedbackModal();
     closeNewDiagramModal();
     closeTermsModal();
+    closeImageExportModal();
+    closeExportMenu();
     oudImportModalBackdrop.hidden = false;
+    const ext = (oudState.fileName || "").toLowerCase().endsWith(".oud2") ? "oud2" : "oud";
+    trackAnalytics("oud_modal_opened", {
+      file_ext: ext,
+      diagrams_count: oudState.parsedDoc ? oudState.parsedDoc.diagrams.length : 0,
+      total_stations: oudState.parsedDoc ? oudState.parsedDoc.stations.length : 0,
+      has_op_tables: !!(oudState.lastResult && oudState.lastResult.stats && oudState.lastResult.stats.operationTablesCount > 0)
+    });
   }
 
   function reparseOudDocument() {
@@ -1201,6 +1501,7 @@ document.addEventListener("DOMContentLoaded", () => {
     oudSelectEncoding.addEventListener("change", () => {
       try {
         reparseOudDocument();
+        trackAnalytics("oud_option_changed", { option_key: "encoding", option_val: oudSelectEncoding.value });
       } catch (err) {
         alert(`文字コード切替エラー:\n${err.message}`);
       }
@@ -1210,15 +1511,22 @@ document.addEventListener("DOMContentLoaded", () => {
     oudSelectDiagram.addEventListener("change", () => {
       oudState.selectedVisibleIds = null;
       refreshOudPreview();
+      trackAnalytics("oud_option_changed", { option_key: "diagram", option_val: oudSelectDiagram.value });
     });
   }
   [oudSelectFallback, oudCheckExcludeCanceled, oudCheckSameRow].forEach(el => {
-    if (el) el.addEventListener("change", refreshOudPreview);
+    if (el) {
+      el.addEventListener("change", () => {
+        refreshOudPreview();
+        const val = el.type === "checkbox" ? String(el.checked) : el.value;
+        trackAnalytics("oud_option_changed", { option_key: el.id, option_val: val });
+      });
+    }
   });
-  if (btnOudVisRecommended) btnOudVisRecommended.addEventListener("click", () => applyStationPreset("recommended"));
-  if (btnOudVisMajor) btnOudVisMajor.addEventListener("click", () => applyStationPreset("major"));
-  if (btnOudVisEndpoints) btnOudVisEndpoints.addEventListener("click", () => applyStationPreset("endpoints"));
-  if (btnOudVisAll) btnOudVisAll.addEventListener("click", () => applyStationPreset("all"));
+  if (btnOudVisRecommended) btnOudVisRecommended.addEventListener("click", () => { applyStationPreset("recommended"); trackAnalytics("oud_option_changed", { option_key: "station_preset", option_val: "recommended" }); });
+  if (btnOudVisMajor) btnOudVisMajor.addEventListener("click", () => { applyStationPreset("major"); trackAnalytics("oud_option_changed", { option_key: "station_preset", option_val: "major" }); });
+  if (btnOudVisEndpoints) btnOudVisEndpoints.addEventListener("click", () => { applyStationPreset("endpoints"); trackAnalytics("oud_option_changed", { option_key: "station_preset", option_val: "endpoints" }); });
+  if (btnOudVisAll) btnOudVisAll.addEventListener("click", () => { applyStationPreset("all"); trackAnalytics("oud_option_changed", { option_key: "station_preset", option_val: "all" }); });
 
   if (btnExecuteOudImport) {
     btnExecuteOudImport.addEventListener("click", () => {
@@ -1234,11 +1542,132 @@ document.addEventListener("DOMContentLoaded", () => {
       tableEditor.setActiveRoster(null);
       const importedTitle = (prepared.metadata && prepared.metadata.title) ? prepared.metadata.title : (oudState.fileName || "OUD読込データ");
       updateDocumentSourceUI("custom", `読込: ${importedTitle}`);
+      hasDirtyDraft = true;
+      flushDraftSave();
+      const st = oudState.lastResult.stats || {};
+      const ext = (oudState.fileName || "").toLowerCase().endsWith(".oud2") ? "oud2" : "oud";
+      trackAnalytics("oud_import_completed", {
+        file_ext: ext,
+        visible_stations: st.visibleStationsCount || 0,
+        total_stations: st.totalStations || 0,
+        rosters_count: st.rostersCount || 0,
+        trains_count: st.trainsCount || 0,
+        fallback_mode: oudSelectFallback ? oudSelectFallback.value : "direction"
+      });
       closeOudImportModal();
     });
   }
 
+  let printCleanupArmedAt = 0;
+
+  function isInAppWebView() {
+    const ua = navigator.userAgent || "";
+    return /Twitter|TwitterAndroid|FBAN|FBAV|Instagram|Line\/|MicroMessenger|YJApp|musical_ly|BytedanceWebview/i.test(ua);
+  }
+
+  function escapeHtmlText(str) {
+    return String(str || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function downloadPrintableHtml() {
+    const data = dataModel.getData();
+    if (!data) return;
+    const pages = diagramRenderer.renderPages(data);
+    const diag = diagramRenderer.getLastDiagnostics();
+    const effectiveCfg = (pages[0] && pages[0].pageConfig)
+      || (diag && diag.effectivePageConfig)
+      || BoxDiagramDataModel.getEffectivePageConfig(data.settings);
+    const titleText = escapeHtmlText((data.metadata && data.metadata.title) ? data.metadata.title : "箱ダイヤ");
+    const pageSections = pages.map((p) => (
+      `<section class="print-page" data-page="${p.pageIndex}">${p.svgHtml}</section>`
+    )).join("\n");
+
+    const htmlDoc = `<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>${titleText} - 印刷用</title>
+<style>
+  @page { size: ${effectiveCfg.cssPageSize}; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e2e8f0; font-family: sans-serif; }
+  .bar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: #1e293b; color: #fff; font-size: 13px; }
+  .bar button { padding: 7px 14px; border: none; border-radius: 6px; background: #2F6F73; color: #fff; font-weight: 700; cursor: pointer; }
+  .pages { padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .print-page { width: 100%; max-width: ${effectiveCfg.baseW}px; background: #fff; box-shadow: 0 6px 20px rgba(15,23,42,0.18); }
+  .print-page svg { width: 100%; height: auto; display: block; }
+  @media print {
+    html, body { background: #fff !important; }
+    .bar { display: none !important; }
+    .pages { padding: 0 !important; gap: 0 !important; display: block !important; }
+    .print-page { max-width: none !important; width: 100% !important; box-shadow: none !important; page-break-after: always !important; break-after: page !important; page-break-inside: avoid !important; break-inside: avoid !important; }
+    .print-page:last-child { page-break-after: avoid !important; break-after: avoid !important; }
+    .print-page svg { width: 100% !important; height: auto !important; max-height: 99.6vh !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span>${titleText}（${pages.length}ページ）— Safari / Chromeの共有・印刷からPDF保存できます</span>
+    <button type="button" onclick="window.print()">印刷 / PDF保存</button>
+  </div>
+  <main class="pages">${pageSections}</main>
+</body>
+</html>`;
+
+    const blob = new Blob([htmlDoc], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const rawName = (data.metadata && data.metadata.title) ? data.metadata.title : "box-diagram";
+    const safeName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+    a.download = `${safeName}_print.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function showInAppPrintBanner() {
+    let banner = document.getElementById("inAppPrintBanner");
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "inAppPrintBanner";
+      banner.className = "inapp-print-banner";
+      banner.innerHTML = `
+        <span>アプリ内ブラウザでは印刷が無効な場合があります。Safari / Chrome で開くか、印刷用HTML・PNG画像として保存してください。</span>
+        <div class="inapp-print-banner-actions">
+          <button type="button" class="btn btn-xs btn-primary" data-inapp-act="png">PNG画像にする</button>
+          <button type="button" class="btn btn-xs btn-secondary" data-inapp-act="download">印刷用HTMLを保存</button>
+          <button type="button" class="btn btn-xs btn-secondary" data-inapp-act="close">閉じる</button>
+        </div>
+      `;
+      banner.addEventListener("click", (e) => {
+        const btn = e.target.closest("button");
+        if (!btn) return;
+        if (btn.dataset.inappAct === "png") {
+          banner.hidden = true;
+          exportDiagramPng("all");
+        } else if (btn.dataset.inappAct === "download") {
+          trackAnalytics("print_html_fallback_saved", { source: "inapp_banner" });
+          downloadPrintableHtml();
+        } else if (btn.dataset.inappAct === "close") {
+          banner.hidden = true;
+        }
+      });
+      document.body.appendChild(banner);
+    }
+    banner.hidden = false;
+  }
+
   function syncBeforePrintState() {
+    printCleanupArmedAt = Date.now();
+    document.body.dataset.printing = "true";
     if (checkShowAllPages && !checkShowAllPages.checked) {
       if (wasAllPagesBeforePrint === null) {
         wasAllPagesBeforePrint = false;
@@ -1252,6 +1681,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function restoreAfterPrintState() {
+    printCleanupArmedAt = 0;
+    delete document.body.dataset.printing;
     if (wasAllPagesBeforePrint === false && checkShowAllPages) {
       wasAllPagesBeforePrint = null;
       checkShowAllPages.checked = false;
@@ -1264,15 +1695,345 @@ document.addEventListener("DOMContentLoaded", () => {
   window.addEventListener("beforeprint", syncBeforePrintState);
   window.addEventListener("afterprint", restoreAfterPrintState);
 
-  // 印刷 / PDF出力
-  btnPrint.addEventListener("click", () => {
-    preparePrintAndTrigger();
+  if (window.matchMedia) {
+    const printMql = window.matchMedia("print");
+    const onPrintMediaChange = (ev) => {
+      if (ev.matches) {
+        syncBeforePrintState();
+      } else if (document.body.dataset.printing === "true") {
+        restoreAfterPrintState();
+      }
+    };
+    if (typeof printMql.addEventListener === "function") {
+      printMql.addEventListener("change", onPrintMediaChange);
+    }
+  }
+
+  // 一部モバイル端末・WebViewで afterprint が発火しない場合の安全復帰
+  window.addEventListener("pointerdown", () => {
+    if (document.body.dataset.printing === "true" && printCleanupArmedAt > 0 && Date.now() - printCleanupArmedAt > 2500) {
+      restoreAfterPrintState();
+    }
+  }, { passive: true });
+
+  // 統合出力ドロップダウン（PDF印刷 / PNG画像 / SVG / 印刷HTML）
+  let exportMenuAnchorBtn = null;
+
+  function closeExportMenu() {
+    if (!exportMenuDropdown || exportMenuDropdown.hidden) return;
+    exportMenuDropdown.hidden = true;
+    if (btnExportMenu) btnExportMenu.setAttribute("aria-expanded", "false");
+    if (btnMobileQuickExport) btnMobileQuickExport.setAttribute("aria-expanded", "false");
+    exportMenuAnchorBtn = null;
+  }
+
+  function openExportMenu(anchorEl) {
+    if (!exportMenuDropdown || !anchorEl) return;
+    const isSame = !exportMenuDropdown.hidden && exportMenuAnchorBtn === anchorEl;
+    if (isSame) {
+      closeExportMenu();
+      return;
+    }
+    exportMenuAnchorBtn = anchorEl;
+    exportMenuDropdown.hidden = false;
+    const rect = anchorEl.getBoundingClientRect();
+    const menuRect = exportMenuDropdown.getBoundingClientRect();
+    const left = Math.max(8, Math.min(window.innerWidth - menuRect.width - 8, rect.right - menuRect.width));
+    const top = Math.min(window.innerHeight - menuRect.height - 8, rect.bottom + 4);
+    exportMenuDropdown.style.left = `${Math.round(left)}px`;
+    exportMenuDropdown.style.top = `${Math.round(Math.max(8, top))}px`;
+    anchorEl.setAttribute("aria-expanded", "true");
+    trackAnalytics("output_menu_opened", { trigger: anchorEl.id || "export" });
+  }
+
+  if (btnExportMenu) {
+    btnExportMenu.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openExportMenu(btnExportMenu);
+    });
+  }
+  if (btnMobileQuickExport) {
+    btnMobileQuickExport.addEventListener("click", (e) => {
+      e.stopPropagation();
+      openExportMenu(btnMobileQuickExport);
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (!exportMenuDropdown || exportMenuDropdown.hidden) return;
+    if (exportMenuDropdown.contains(e.target)) return;
+    if (btnExportMenu && btnExportMenu.contains(e.target)) return;
+    if (btnMobileQuickExport && btnMobileQuickExport.contains(e.target)) return;
+    closeExportMenu();
   });
 
-  function preparePrintAndTrigger() {
+  // 高解像度 PNG / SVG 画像エクスポート ＋ モバイル共有・長押し保存モーダル
+  const imageExportModalBackdrop = document.getElementById("imageExportModalBackdrop");
+  const btnCloseImageExport = document.getElementById("btnCloseImageExport");
+  const btnCloseImageExportFooter = document.getElementById("btnCloseImageExportFooter");
+  const imageExportPreviewImg = document.getElementById("imageExportPreviewImg");
+  const imageExportInfo = document.getElementById("imageExportInfo");
+  const btnShareExportedImage = document.getElementById("btnShareExportedImage");
+  const btnDownloadExportedImage = document.getElementById("btnDownloadExportedImage");
+  let activeExportImageState = null;
+
+  function closeImageExportModal() {
+    if (!imageExportModalBackdrop) return;
+    imageExportModalBackdrop.hidden = true;
+    if (imageExportPreviewImg) imageExportPreviewImg.removeAttribute("src");
+    if (activeExportImageState && activeExportImageState.url) {
+      URL.revokeObjectURL(activeExportImageState.url);
+    }
+    activeExportImageState = null;
+  }
+
+  function triggerBlobDownload(blob, fileName) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  function svgMarkupToCanvas(svgHtml, baseW, baseH, pixelScale) {
+    return new Promise((resolve, reject) => {
+      const targetW = Math.max(1, Math.round(baseW * pixelScale));
+      const targetH = Math.max(1, Math.round(baseH * pixelScale));
+      const sizedSvg = svgHtml
+        .replace(/<svg\b([^>]*?)width="100%"\s+height="100%"/i, `<svg$1width="${targetW}" height="${targetH}"`)
+        .replace(/\.diagram-empty-hint\s*\{[^}]*\}/, ".diagram-empty-hint { display: none; }");
+      const svgBlob = new Blob([sizedSvg], { type: "image/svg+xml;charset=utf-8" });
+      const svgUrl = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = targetW;
+          canvas.height = targetH;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#FFFFFF";
+          ctx.fillRect(0, 0, targetW, targetH);
+          ctx.drawImage(img, 0, 0, targetW, targetH);
+          URL.revokeObjectURL(svgUrl);
+          resolve(canvas);
+        } catch (err) {
+          URL.revokeObjectURL(svgUrl);
+          reject(err);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(svgUrl);
+        reject(new Error("SVG画像変換に失敗しました"));
+      };
+      img.src = svgUrl;
+    });
+  }
+
+  async function exportDiagramPng(scope = "current") {
+    const data = dataModel.getData();
+    if (!data) return;
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
+    const allPages = diagramRenderer.renderPages(data);
+    if (!allPages || allPages.length === 0) return;
+
+    const targetPages = scope === "all"
+      ? allPages
+      : [allPages.find(p => p.pageIndex === currentPageIndex) || allPages[0]];
+    const diag = diagramRenderer.getLastDiagnostics();
+    const effectiveCfg = (targetPages[0] && targetPages[0].pageConfig)
+      || (diag && diag.effectivePageConfig)
+      || BoxDiagramDataModel.getEffectivePageConfig(data.settings);
+
+    const maxBaseW = Math.max(...targetPages.map(p => (p.pageConfig ? p.pageConfig.baseW : effectiveCfg.baseW) || 1123));
+    const sumBaseH = targetPages.reduce((acc, p) => acc + ((p.pageConfig ? p.pageConfig.baseH : effectiveCfg.baseH) || 1587), 0);
+    const gapPx = targetPages.length > 1 ? 16 : 0;
+
+    // 端末Canvas上限 (3840px幅 / 8192px高) を超えない高精細スケールを算出
+    let scale = 2.0;
+    scale = Math.min(scale, 3840 / Math.max(1, maxBaseW));
+    scale = Math.min(scale, 8192 / Math.max(1, sumBaseH + (targetPages.length - 1) * gapPx));
+    scale = Math.max(0.75, Math.round(scale * 100) / 100);
+
+    try {
+      const pageCanvases = [];
+      for (const p of targetPages) {
+        const cfg = p.pageConfig || effectiveCfg;
+        const c = await svgMarkupToCanvas(p.svgHtml, cfg.baseW, cfg.baseH, scale);
+        pageCanvases.push(c);
+      }
+
+      let outCanvas;
+      if (pageCanvases.length === 1) {
+        outCanvas = pageCanvases[0];
+      } else {
+        const scaledGap = Math.round(gapPx * scale);
+        const totalW = Math.max(...pageCanvases.map(c => c.width));
+        const totalH = pageCanvases.reduce((s, c) => s + c.height, 0) + (pageCanvases.length - 1) * scaledGap;
+        outCanvas = document.createElement("canvas");
+        outCanvas.width = totalW;
+        outCanvas.height = totalH;
+        const octx = outCanvas.getContext("2d");
+        octx.fillStyle = "#e2e8f0";
+        octx.fillRect(0, 0, totalW, totalH);
+        let yCursor = 0;
+        for (const c of pageCanvases) {
+          const offsetX = Math.round((totalW - c.width) / 2);
+          octx.drawImage(c, offsetX, yCursor);
+          yCursor += c.height + scaledGap;
+        }
+      }
+
+      const pngBlob = await new Promise((res) => outCanvas.toBlob(res, "image/png"));
+      if (!pngBlob) throw new Error("PNGデータ生成に失敗しました");
+
+      const rawName = (data.metadata && data.metadata.title) ? data.metadata.title : "box-diagram";
+      const safeName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+      const fileSuffix = scope === "all" ? "all" : `p${targetPages[0].pageIndex}`;
+      const fileName = `${safeName}_${fileSuffix}.png`;
+      const isMobileOrInApp = window.innerWidth <= 900 || isInAppWebView();
+
+      trackAnalytics("export_image_triggered", {
+        format: scope === "all" ? "png_all" : "png_current",
+        method: isMobileOrInApp ? "preview_modal" : "download",
+        page_count: targetPages.length,
+        axis_mode: (data.settings && data.settings.xAxisMode === "time") ? "time" : "station"
+      });
+      if (window.BoxAnalytics) {
+        window.BoxAnalytics.snapshotDataSettings(data, "export_png");
+      }
+
+      if (!isMobileOrInApp) {
+        triggerBlobDownload(pngBlob, fileName);
+        showAppToast(`PNG画像を保存しました（${outCanvas.width}×${outCanvas.height}px）`);
+      } else if (imageExportModalBackdrop && imageExportPreviewImg) {
+        closeHelpModal();
+        closeTermsModal();
+        closeFeedbackModal();
+        closeOudImportModal();
+        closeNewDiagramModal();
+        const url = URL.createObjectURL(pngBlob);
+        activeExportImageState = { blob: pngBlob, url, fileName };
+        imageExportPreviewImg.src = url;
+        if (imageExportInfo) {
+          imageExportInfo.textContent = `${fileName}（${outCanvas.width}×${outCanvas.height}px）`;
+        }
+        if (btnShareExportedImage) {
+          let canShareFile = false;
+          try {
+            const testFile = new File([pngBlob], fileName, { type: "image/png" });
+            canShareFile = !!(navigator.canShare && navigator.canShare({ files: [testFile] }));
+          } catch (_) { /* ignore */ }
+          btnShareExportedImage.hidden = !canShareFile;
+        }
+        imageExportModalBackdrop.hidden = false;
+        trackAnalytics("modal_opened", { modal: "image_export" });
+      } else {
+        triggerBlobDownload(pngBlob, fileName);
+      }
+    } catch (err) {
+      showAppToast(`画像書き出しに失敗しました: ${err.message || err}`);
+    }
+  }
+
+  function exportDiagramSvg() {
+    const data = dataModel.getData();
+    if (!data) return;
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
+    const pages = diagramRenderer.renderPages(data);
+    if (!pages || pages.length === 0) return;
+
+    const rawName = (data.metadata && data.metadata.title) ? data.metadata.title : "box-diagram";
+    const safeName = rawName.replace(/[\\/:*?"<>|]/g, "_");
+
+    pages.forEach((p, idx) => {
+      const cfg = p.pageConfig || BoxDiagramDataModel.getEffectivePageConfig(data.settings);
+      const svgOut = p.svgHtml.replace(/<svg\b([^>]*?)width="100%"\s+height="100%"/i, `<svg$1width="${cfg.baseW}" height="${cfg.baseH}"`);
+      const blob = new Blob([svgOut], { type: "image/svg+xml;charset=utf-8" });
+      const fileName = pages.length === 1 ? `${safeName}.svg` : `${safeName}_p${p.pageIndex}.svg`;
+      setTimeout(() => triggerBlobDownload(blob, fileName), idx * 140);
+    });
+
+    showAppToast(`SVGファイルを保存しました（全${pages.length}ページ）`);
+    trackAnalytics("export_image_triggered", {
+      format: "svg",
+      method: "download",
+      page_count: pages.length,
+      axis_mode: (data.settings && data.settings.xAxisMode === "time") ? "time" : "station"
+    });
+    if (window.BoxAnalytics) {
+      window.BoxAnalytics.snapshotDataSettings(data, "export_svg");
+    }
+  }
+
+  if (btnExportPngCurrent) {
+    btnExportPngCurrent.addEventListener("click", () => exportDiagramPng("current"));
+  }
+  if (btnExportPngAll) {
+    btnExportPngAll.addEventListener("click", () => exportDiagramPng("all"));
+  }
+  if (btnExportSvg) {
+    btnExportSvg.addEventListener("click", exportDiagramSvg);
+  }
+  if (btnExportPrintHtml) {
+    btnExportPrintHtml.addEventListener("click", () => {
+      closeExportMenu();
+      setMobileHeaderMenuOpen(false);
+      const data = dataModel.getData();
+      const pagesCount = data ? diagramRenderer.renderPages(data).length : 1;
+      trackAnalytics("print_html_fallback_saved", { source: "export_menu", page_count: pagesCount });
+      downloadPrintableHtml();
+    });
+  }
+  if (btnDownloadExportedImage) {
+    btnDownloadExportedImage.addEventListener("click", () => {
+      if (!activeExportImageState) return;
+      triggerBlobDownload(activeExportImageState.blob, activeExportImageState.fileName);
+      trackAnalytics("export_image_triggered", { format: "png_modal_download", method: "download" });
+    });
+  }
+  if (btnShareExportedImage) {
+    btnShareExportedImage.addEventListener("click", async () => {
+      if (!activeExportImageState || !navigator.share) return;
+      try {
+        const file = new File([activeExportImageState.blob], activeExportImageState.fileName, { type: "image/png" });
+        await navigator.share({ files: [file], title: activeExportImageState.fileName });
+        trackAnalytics("export_image_triggered", { format: "png_modal_share", method: "share" });
+      } catch (_) { /* ユーザーキャンセル等は無視 */ }
+    });
+  }
+
+  // 印刷 / PDF出力
+  btnPrint.addEventListener("click", () => {
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
+    preparePrintAndTrigger("menu");
+  });
+
+  function preparePrintAndTrigger(via = "menu") {
     syncBeforePrintState();
+    const curData = dataModel.getData();
+    const s = (curData && curData.settings) || {};
+    const cfg = BoxDiagramDataModel.getEffectivePageConfig(s);
+    trackAnalytics("print_pdf_triggered", {
+      via,
+      x_axis_mode: cfg.xAxisMode,
+      page_size: cfg.pageSize,
+      orientation: cfg.orientation,
+      page_count: totalPageCount,
+      is_inapp_browser: isInAppWebView(),
+      mobile_view: document.body.dataset.mobileView || "preview"
+    });
+    if (window.BoxAnalytics && curData) {
+      window.BoxAnalytics.snapshotDataSettings(curData, "print_pdf");
+    }
     window.print();
-    restoreAfterPrintState();
+    if (isInAppWebView()) {
+      showInAppPrintBanner();
+    }
   }
 
   // 横軸モード / クイック用紙コントロール
@@ -1341,6 +2102,7 @@ document.addEventListener("DOMContentLoaded", () => {
   btnPrevPage.addEventListener("click", () => {
     if (currentPageIndex > 1) {
       currentPageIndex--;
+      trackAnalytics("page_navigated", { action: "prev", page: currentPageIndex, total_pages: totalPageCount });
       renderPreview({ resetScroll: !checkShowAllPages.checked });
     }
   });
@@ -1348,11 +2110,13 @@ document.addEventListener("DOMContentLoaded", () => {
   btnNextPage.addEventListener("click", () => {
     if (currentPageIndex < totalPageCount) {
       currentPageIndex++;
+      trackAnalytics("page_navigated", { action: "next", page: currentPageIndex, total_pages: totalPageCount });
       renderPreview({ resetScroll: !checkShowAllPages.checked });
     }
   });
 
   checkShowAllPages.addEventListener("change", () => {
+    trackAnalytics("page_navigated", { action: checkShowAllPages.checked ? "show_all_on" : "show_all_off", total_pages: totalPageCount });
     renderPreview();
   });
 
@@ -1369,6 +2133,7 @@ document.addEventListener("DOMContentLoaded", () => {
       zoomMode = "manual";
       currentZoom = parseFloat(val) || 1.0;
     }
+    trackAnalytics("zoom_changed", { mode: zoomMode === "manual" ? `${Math.round(currentZoom * 100)}pct` : zoomMode, via: "select" });
     renderPreview();
   });
 
@@ -1376,6 +2141,7 @@ document.addEventListener("DOMContentLoaded", () => {
     zoomMode = "manual";
     currentZoom = Math.min(2.5, Math.round((appliedScale + 0.15) * 100) / 100);
     syncZoomSelect();
+    trackAnalytics("zoom_changed", { mode: `${Math.round(currentZoom * 100)}pct`, via: "btn_in" });
     renderPreview();
   });
 
@@ -1383,6 +2149,7 @@ document.addEventListener("DOMContentLoaded", () => {
     zoomMode = "manual";
     currentZoom = Math.max(0.2, Math.round((appliedScale - 0.15) * 100) / 100);
     syncZoomSelect();
+    trackAnalytics("zoom_changed", { mode: `${Math.round(currentZoom * 100)}pct`, via: "btn_out" });
     renderPreview();
   });
 
@@ -1449,6 +2216,9 @@ document.addEventListener("DOMContentLoaded", () => {
       zoomMode = "manual";
       currentZoom = nextScale;
       syncZoomSelect();
+      if (window.BoxAnalytics && typeof window.BoxAnalytics.trackDebounced === "function") {
+        window.BoxAnalytics.trackDebounced("wheel_zoom", "zoom_changed", { mode: `${Math.round(currentZoom * 100)}pct`, via: "wheel" }, 500);
+      }
       renderPreview();
 
       const newWrappers = previewViewport.querySelectorAll(".preview-page-wrapper");
@@ -1633,6 +2403,9 @@ document.addEventListener("DOMContentLoaded", () => {
     closeFeedbackModal();
     closeOudImportModal();
     closeTermsModal();
+    closeImageExportModal();
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
     if (inputNewTitle) inputNewTitle.value = "新規路線 車両運用図";
     if (inputNewCopyright) inputNewCopyright.value = "";
     if (selectNewRosterCount) selectNewRosterCount.value = "1";
@@ -1642,6 +2415,7 @@ document.addEventListener("DOMContentLoaded", () => {
     resetNewStationsDraft();
     renderNewStationsList();
     newDiagramModalBackdrop.hidden = false;
+    trackAnalytics("modal_opened", { modal: "new_diagram" });
     if (inputNewTitle) {
       inputNewTitle.focus();
       inputNewTitle.select();
@@ -1649,7 +2423,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   if (btnNewDiagram) btnNewDiagram.addEventListener("click", openNewDiagramModal);
-  if (btnWelcomeNewDiagram) btnWelcomeNewDiagram.addEventListener("click", openNewDiagramModal);
+  if (btnWelcomeNewDiagram) {
+    btnWelcomeNewDiagram.addEventListener("click", () => {
+      trackAnalytics("welcome_bar_action", { action: "new_diagram" });
+      openNewDiagramModal();
+    });
+  }
 
   if (btnAddNewStation) {
     btnAddNewStation.addEventListener("click", () => {
@@ -1702,6 +2481,15 @@ document.addEventListener("DOMContentLoaded", () => {
       tableEditor.setActiveRoster(firstRoster);
       tableEditor.setActiveTab(firstRoster ? "tab-trains" : "tab-rosters");
       updateDocumentSourceUI("custom", `作成中: ${newData.metadata.title}`);
+      hasDirtyDraft = true;
+      flushDraftSave();
+      trackAnalytics("diagram_created", {
+        roster_count: rosterCount,
+        station_count: cleanedStations.length,
+        layout_preset: layoutPreset,
+        type_preset: typePreset,
+        starter_train: includeStarterTrain
+      });
       closeNewDiagramModal();
       showAppToast("新しいダイヤを作成しました");
     });
@@ -1759,7 +2547,11 @@ document.addEventListener("DOMContentLoaded", () => {
     closeOudImportModal();
     closeNewDiagramModal();
     closeTermsModal();
+    closeImageExportModal();
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
     helpModalBackdrop.hidden = false;
+    trackAnalytics("modal_opened", { modal: "help" });
     if (helpModalBody) helpModalBody.scrollTop = 0;
     if (helpModalNav) {
       helpModalNav.querySelectorAll(".help-nav-btn").forEach((b, idx) => {
@@ -1779,7 +2571,11 @@ document.addEventListener("DOMContentLoaded", () => {
     closeFeedbackModal();
     closeOudImportModal();
     closeNewDiagramModal();
+    closeImageExportModal();
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
     termsModalBackdrop.hidden = false;
+    trackAnalytics("modal_opened", { modal: "terms" });
   }
 
   function closeTermsModal() {
@@ -1793,7 +2589,11 @@ document.addEventListener("DOMContentLoaded", () => {
     closeOudImportModal();
     closeNewDiagramModal();
     closeTermsModal();
+    closeImageExportModal();
+    closeExportMenu();
+    setMobileHeaderMenuOpen(false);
     feedbackModalBackdrop.hidden = false;
+    trackAnalytics("modal_opened", { modal: "feedback" });
     if (feedbackFormFrame && feedbackFormFrame.dataset.src && !feedbackFormFrame.getAttribute("src")) {
       if (feedbackLoadingState) feedbackLoadingState.hidden = false;
       feedbackFormFrame.setAttribute("src", feedbackFormFrame.dataset.src);
@@ -1831,6 +2631,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnCopyTermsCredit) {
     btnCopyTermsCredit.addEventListener("click", () => {
+      trackAnalytics("credit_copied", { via: "terms_modal" });
       const text = "https://sekitan66325.github.io/box-diagram/ で作成";
       if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
         navigator.clipboard.writeText(text).then(() => {
@@ -1862,6 +2663,7 @@ document.addEventListener("DOMContentLoaded", () => {
   bindModalCloseTriggers(feedbackModalBackdrop, btnCloseFeedback, btnCloseFeedbackFooter, closeFeedbackModal);
   bindModalCloseTriggers(oudImportModalBackdrop, btnCloseOudImport, btnCancelOudImport, closeOudImportModal);
   bindModalCloseTriggers(newDiagramModalBackdrop, btnCloseNewDiagram, btnCancelNewDiagram, closeNewDiagramModal);
+  bindModalCloseTriggers(imageExportModalBackdrop, btnCloseImageExport, btnCloseImageExportFooter, closeImageExportModal);
 
   if (helpModalNav && helpModalBody) {
     helpModalNav.querySelectorAll(".help-nav-btn").forEach(btn => {
@@ -1871,6 +2673,7 @@ document.addEventListener("DOMContentLoaded", () => {
         helpModalNav.querySelectorAll(".help-nav-btn").forEach(b => b.classList.remove("active"));
         btn.classList.add("active");
         if (sec) sec.scrollIntoView({ behavior: "smooth", block: "start" });
+        trackAnalytics("help_section_clicked", { section: targetId });
       });
     });
   }
@@ -1884,7 +2687,13 @@ document.addEventListener("DOMContentLoaded", () => {
         closeHelpModal();
       }
     } else if (e.key === "Escape") {
-      if (newDiagramModalBackdrop && !newDiagramModalBackdrop.hidden) {
+      if (exportMenuDropdown && !exportMenuDropdown.hidden) {
+        e.preventDefault();
+        closeExportMenu();
+      } else if (imageExportModalBackdrop && !imageExportModalBackdrop.hidden) {
+        e.preventDefault();
+        closeImageExportModal();
+      } else if (newDiagramModalBackdrop && !newDiagramModalBackdrop.hidden) {
         e.preventDefault();
         closeNewDiagramModal();
       } else if (oudImportModalBackdrop && !oudImportModalBackdrop.hidden) {
@@ -1903,9 +2712,92 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  // 初回プレビュー描画
-  updateDocumentSourceUI("sample", "sakuragawa_main");
-  renderPreview();
+  // モバイル アプリ内ブラウザ向け 1行ヒントバー
+  if (mobileInAppHintBar) {
+    let hintDismissed = false;
+    try {
+      hintDismissed = sessionStorage.getItem("hakodiagram_inapp_hint_dismissed") === "1";
+    } catch (_) { /* ignore */ }
+    if (isInAppWebView() && window.innerWidth <= 900 && !hintDismissed) {
+      mobileInAppHintBar.hidden = false;
+    }
+    if (btnDismissInAppHint) {
+      btnDismissInAppHint.addEventListener("click", () => {
+        mobileInAppHintBar.hidden = true;
+        try {
+          sessionStorage.setItem("hakodiagram_inapp_hint_dismissed", "1");
+        } catch (_) { /* ignore */ }
+        trackAnalytics("inapp_banner_action", { action: "dismiss" });
+      });
+    }
+  }
+
+  // PWA Service Worker 登録＆インストール計測
+  if ("serviceWorker" in navigator && (location.protocol === "http:" || location.protocol === "https:")) {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  }
+  window.addEventListener("beforeinstallprompt", () => {
+    trackAnalytics("pwa_lifecycle", { state: "prompt_available" });
+  });
+  window.addEventListener("appinstalled", () => {
+    trackAnalytics("pwa_lifecycle", { state: "installed" });
+  });
+
+  // 自動保存下書きの復元 & 初回プレビュー描画
+  let startupRestoredFromDraft = false;
+  let startupDraftStorage = "none";
+  const syncDraft = readSyncDraft();
+  if (syncDraft && syncDraft.data && !syncDraft.storage) {
+    const val = dataModel.validateSchema(syncDraft.data);
+    if (val.valid) {
+      dataModel.load(syncDraft.data);
+      if (syncDraft.activeRosterId) tableEditor.setActiveRoster(syncDraft.activeRosterId);
+      if (syncDraft.activeTab) tableEditor.setActiveTab(syncDraft.activeTab);
+      updateDocumentSourceUI("custom", formatDraftSourceLabel(syncDraft.data, syncDraft.sourceMode, syncDraft.sourceLabel));
+      hasDirtyDraft = true;
+      startupRestoredFromDraft = true;
+      startupDraftStorage = "localstorage";
+    }
+  }
+
+  if (!startupRestoredFromDraft) {
+    updateDocumentSourceUI("sample", "sakuragawa_main");
+    renderPreview();
+    if (syncDraft && syncDraft.storage === "idb") {
+      loadDraftFromIdb().then((idbDraft) => {
+        if (!idbDraft || !idbDraft.data) return;
+        const val = dataModel.validateSchema(idbDraft.data);
+        if (!val.valid) return;
+        dataModel.load(idbDraft.data);
+        if (idbDraft.activeRosterId) tableEditor.setActiveRoster(idbDraft.activeRosterId);
+        if (idbDraft.activeTab) tableEditor.setActiveTab(idbDraft.activeTab);
+        updateDocumentSourceUI("custom", formatDraftSourceLabel(idbDraft.data, idbDraft.sourceMode, idbDraft.sourceLabel));
+        hasDirtyDraft = true;
+        showAppToast("前回の作業下書きを自動復元しました");
+        trackAnalytics("draft_restored", { storage: "indexeddb" });
+      }).catch(() => {});
+    }
+  } else {
+    showAppToast("前回の作業下書きを自動復元しました");
+    trackAnalytics("draft_restored", { storage: startupDraftStorage });
+  }
+
   updateHistoryButtons();
   updatePrintPageStyle(dataModel.getData());
+
+  const isStandalonePwa = !!(
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) ||
+    window.navigator.standalone === true
+  );
+  trackAnalytics("app_loaded", {
+    device_layout: window.innerWidth <= 900 ? "mobile" : "desktop",
+    is_inapp_browser: isInAppWebView(),
+    webview_kind: window.BoxAnalytics ? window.BoxAnalytics.detectWebViewKind(navigator.userAgent) : "standard",
+    pwa_standalone: isStandalonePwa,
+    has_restored_draft: startupRestoredFromDraft,
+    viewport_bucket: window.BoxAnalytics ? window.BoxAnalytics.viewportBucket(window.innerWidth) : "unknown"
+  });
+  if (window.BoxAnalytics && dataModel.getData()) {
+    window.BoxAnalytics.snapshotDataSettings(dataModel.getData(), startupRestoredFromDraft ? "draft_restore" : "init");
+  }
 });

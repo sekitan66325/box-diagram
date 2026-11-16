@@ -1,0 +1,30 @@
+{
+  "name": "箱ダイヤ描画システム - 車両運用図・仕業行路図作成ツール",
+  "short_name": "箱ダイヤ描画",
+  "description": "ブラウザだけで鉄道の箱ダイヤ（駅軸）や時刻軸の運用線図（棒ダイヤ）を作成・編集し、.oud/.oud2取込や1:1ベクターPDF・画像保存ができる無料Webアプリです。",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2F6F73",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "./assets/favicon.png",
+      "sizes": "64x64",
+      "type": "image/png"
+    },
+    {
+      "src": "./assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./assets/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

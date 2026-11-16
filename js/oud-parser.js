@@ -608,6 +608,8 @@ class OudParser {
         symbolScale: 1.0,
         symbolFill: "preset",
         autoSyncCoupled: true,
+        showDepotOutCol: true,
+        showDepotInCol: true,
         timeAxisStartHour: Math.max(0, Math.min(12, Math.floor((parsedDoc.kitenMinutes || 240) / 60)))
       },
       stations,
@@ -641,7 +643,8 @@ class OudParser {
       name: st.name,
       abbr: st.abbr,
       visible: visibleSet.has(st.id),
-      x: 200.32
+      x: 200.32,
+      km: null
     }));
 
     const visible = stations.filter(s => s.visible);
